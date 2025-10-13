@@ -1,1 +1,26 @@
 @import 'tailwindcss';
+
+@theme {
+	--color-primary: var(--foreground);
+	--color-secondary: var(--muted);
+	--color-tertiary: var(--background);
+	--blue-1: var(--foreground);
+	--blue-2: #ecf5ff;
+	--blue-3: #051c34;
+}
+
+@layer utilities {
+	:root {
+		:root {
+			--background: #ffffff;
+			--foreground: #1572d3;
+			--foreground-alt: '#ECF5FF';
+			--muted: '#6D6D6D';
+		}
+	}
+}
+
+body {
+	font-family: 'Poppins', sans-serif;
+	color: #333333;
+}
