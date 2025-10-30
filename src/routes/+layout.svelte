@@ -16,9 +16,6 @@
 		rel="stylesheet"
 	/>
 </svelte:head>
-<section
-	class="relative min-h-screen overflow-hidden bg-[url('https://image-hosting-server-production-da8d.up.railway.app/api/files/r682kajzrtrg4zc/hywt5jppfcc1bm3/header_1_2tOQy09VKG.png')] bg-cover bg-center"
->
-	<Navbar />
-	{@render children?.()}
-</section>
+
+<Navbar />
+{@render children?.()}
