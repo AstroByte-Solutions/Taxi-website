@@ -1,8 +1,10 @@
 <script lang="ts">
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import Navbar from '$lib/components/navbar.svelte';
 
 	let { children } = $props();
+	let mobileMenuOpen = $state(false);
 </script>
 
 <svelte:head>
@@ -15,4 +17,5 @@
 	/>
 </svelte:head>
 
+<Navbar />
 {@render children?.()}

@@ -7,7 +7,7 @@
 	import Tata from '$lib/icons/tata.svelte';
 </script>
 
-<section class="items-centerpx-6 flex flex-col py-20">
+<section class="flex flex-col items-center px-6 py-20">
 	<!-- Header -->
 	<div class="flex flex-col items-center gap-4">
 		<span
