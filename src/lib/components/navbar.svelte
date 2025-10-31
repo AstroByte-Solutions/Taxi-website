@@ -3,7 +3,9 @@
 	let mobileMenuOpen = $state(false);
 </script>
 
-<nav class="mt-6 flex items-center justify-between px-4 md:mt-10 md:px-20">
+<nav
+	class=" sticky top-0 z-50 flex items-center justify-between bg-white px-4 py-4 shadow-md md:px-20 md:py-6"
+>
 	<div class="z-50 flex items-center gap-2">
 		<Logo />
 		<span class="font-semibold text-primary capitalize">SKR</span>
