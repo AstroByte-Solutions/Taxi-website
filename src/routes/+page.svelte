@@ -1,4 +1,5 @@
 <script>
+	import ChooseVehicles from '$lib/components/homePage/chooseVehicles.svelte';
 	import Files from '$lib/pages/files.svelte';
 	import { Tabs } from 'bits-ui';
 </script>
@@ -319,7 +320,8 @@
 							<div class="min-w-0 flex-1">
 								<label
 									for="return-time-roundtrip"
-									class="mb-1 block text-xs font-semibold text-gray-900 sm:text-sm">Return time</label
+									class="mb-1 block text-xs font-semibold text-gray-900 sm:text-sm"
+									>Return time</label
 								>
 								<input
 									id="return-time-roundtrip"
@@ -344,4 +346,5 @@
 		</div>
 	</div>
 </section>
-<Files/>
+<Files />
+<ChooseVehicles />
