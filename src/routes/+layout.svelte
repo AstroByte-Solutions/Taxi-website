@@ -19,8 +19,7 @@
 
 <!-- Sticky Navbar -->
 
-	<Navbar />
-
+<Navbar />
 
 <!-- Main Content -->
 <main class="min-h-screen">
