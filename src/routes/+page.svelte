@@ -1,10 +1,11 @@
 <script lang="ts">
 	import Files from '$lib/pages/files.svelte';
 	import { Tabs } from 'bits-ui';
+	import TaxiService from '$lib/components/taxiService/taxiService.svelte';
 </script>
 
 <section
-	class="relative min-h-screen overflow-hidden bg-[url('https://image-hosting-server-production-da8d.up.railway.app/api/files/r682kajzrtrg4zc/hywt5jppfcc1bm3/header_1_2tOQy09VKG.png')] bg-cover bg-center"
+	class="relative min-h-screen overflow-hidden bg-[url('https://image-hosting-server-production-da8d.up.railway.app/api/files/r682kajzrtrg4zc/hywt5jppfcc1bm3/header_1_2tOQy09VKG.png')] bg-cover bg-center sm:opacity-0 md:opacity-100"
 >
 	<div class="mx-auto flex max-w-[1340px] flex-col justify-between px-4 sm:px-6 lg:px-8">
 		<div class="mt-16 flex flex-col gap-6 sm:mt-24 sm:gap-8 md:mt-32 lg:mt-40 lg:gap-10">
@@ -347,3 +348,5 @@
 </section>
 
 <Files />
+
+<TaxiService />
