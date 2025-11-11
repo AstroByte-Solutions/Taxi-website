@@ -1,7 +1,8 @@
 <script lang="ts">
+	import ChooseVehicles from '$lib/components/homePage/chooseVehicles.svelte';
+	import Files from '$lib/pages/files.svelte';
 	import { Tabs } from 'bits-ui';
 	import { Geocode, type GeocodeResult } from '$lib/geocode/geocode';
-	import Files from '$lib/pages/files.svelte';
 	import TaxiService from '$lib/components/taxiService/taxiService.svelte';
 
 	// One Way Trip State
@@ -851,6 +852,7 @@
 	</div>
 </section>
 <Files />
+<ChooseVehicles />
 
 <TaxiService />
 
