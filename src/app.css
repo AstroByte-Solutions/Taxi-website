@@ -21,4 +21,5 @@
 body {
 	font-family: 'Poppins', sans-serif;
 	color: #333333;
+	overflow-x: hidden;
 }
