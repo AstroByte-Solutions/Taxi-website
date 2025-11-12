@@ -243,7 +243,7 @@
 			class="pointer-events-none absolute top-1/2 right-0 h-auto w-full translate-x-1/4 -translate-y-1/2 opacity-60 sm:w-3/4 sm:translate-x-1/12 sm:opacity-80 md:w-2/3 md:opacity-100 lg:w-1/2"
 		>
 			<img
-				src="https://image-hosting-server-production-da8d.up.railway.app/api/files/r682kajzrtrg4zc/hywt5jppfcc1bm3/porsche_car_bvtfEE6A23.png"
+				src="https://image-hosting-server-production-da8d.up.railway.app/api/files/r682kajzrtrg4zc/z517ep0h21af2xu/chat_gpt_image_nov_12_2025_11_41_23_am_aSoLaSualo.png"
 				alt="car"
 				class="h-auto w-full"
 			/>
