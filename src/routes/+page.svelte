@@ -872,4 +872,8 @@
 	.location-search-container ::-webkit-scrollbar-thumb:hover {
 		background: #555;
 	}
+	:global(body) {
+		overflow-x: hidden;
+		max-width: 100vw;
+	}
 </style>

@@ -2,6 +2,7 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import Navbar from '$lib/components/navbar.svelte';
+	import Footer from '$lib/components/footer.svelte';
 
 	let { children } = $props();
 	let mobileMenuOpen = $state(false);
@@ -22,6 +23,7 @@
 <Navbar />
 
 <!-- Main Content -->
-<main class="min-h-screen">
+<main class="min-h-screen w-full overflow-x-hidden">
 	{@render children?.()}
 </main>
+<Footer />
