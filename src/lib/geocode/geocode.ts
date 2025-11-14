@@ -1,7 +1,5 @@
 import { Env_data } from '$lib/constant/url.constant';
 
-// src/lib/geocode/geocode.ts
-
 interface MapboxFeature {
 	id: string;
 	type: string;
@@ -48,14 +46,13 @@ interface GeocodeOptions {
 	limit?: number;
 }
 
-// Your Mapbox token
+// --- Mapbox token and caches ---
 const MAPBOX_TOKEN = Env_data.MAPBOX_TOKEN;
 const CACHE_KEY = 'mapbox_cache_v1';
 const MIN_INTERVAL_MS = 100;
-
 let lastRequestTs = 0;
 
-// Initialize cache from localStorage
+// --- Geocode cache (localStorage) ---
 const getCacheFromStorage = (): Map<string, GeocodeResult[]> => {
 	if (typeof window === 'undefined') return new Map();
 
@@ -83,7 +80,7 @@ function persist(): void {
 	}
 }
 
-// Parse Mapbox context to extract address components
+// --- parse address helper (same as before) ---
 function parseAddress(feature: MapboxFeature): Record<string, string> {
 	const address: Record<string, string> = {
 		name: feature.text || ''
@@ -135,6 +132,10 @@ export async function Geocode(
 ): Promise<GeocodeResult[]> {
 	if (!query || query.trim().length < 2) return [];
 
+	if (!MAPBOX_TOKEN) {
+		throw new Error('Mapbox token not provided (MAPBOX_TOKEN).');
+	}
+
 	const key = query.trim().toLowerCase();
 	if (cache.has(key)) {
 		return cache.get(key)!;
@@ -147,23 +148,21 @@ export async function Geocode(
 	}
 	lastRequestTs = Date.now();
 
-	// Correct Mapbox Geocoding API v5 endpoint (not v6)
 	const encodedQuery = encodeURIComponent(query);
 	const url =
-		`${Env_data.GEOCODE_URL}${encodedQuery}.json?` +
+		`${Env_data.GEOCODE_URL}/${encodedQuery}.json?` +
 		`access_token=${MAPBOX_TOKEN}&` +
 		`limit=${limit}&` +
-		`country=in&` + // Restrict to India
+		`country=in&` +
 		`language=en&` +
-		`types=place,locality,neighborhood,address,poi`; // Include relevant place types
+		`types=place,locality,neighborhood,address,poi`;
 
 	try {
 		const resp = await fetch(url, {
-			headers: {
-				Accept: 'application/json'
-			}
+			headers: { Accept: 'application/json' }
 		});
 
+		// TODO: Here using toast-----------------------
 		if (!resp.ok) {
 			const errorText = await resp.text();
 			console.error('Mapbox API Error:', errorText);
@@ -172,15 +171,11 @@ export async function Geocode(
 
 		const data: MapboxResponse = await resp.json();
 
-		console.log('Mapbox response------------', data);
-
-		// Convert Mapbox features to our GeocodeResult format
-		const items: GeocodeResult[] = data.features
+		const items: GeocodeResult[] = (data.features || [])
 			.filter((feature) => {
-				// Double-check it's in India
 				const context = feature.context || [];
 				const countryContext = context.find((ctx) => ctx.id.startsWith('country'));
-				return countryContext?.short_code?.toLowerCase() === 'in';
+				return !countryContext || countryContext.short_code?.toLowerCase() === 'in';
 			})
 			.map((feature) => {
 				const [lon, lat] = feature.center;
@@ -205,29 +200,144 @@ export async function Geocode(
 		throw error;
 	}
 }
-// ```
 
-// ## Key Fixes:
+// ------------------- Directions integration below -------------------
 
-// ### 1. **Correct API Endpoint**
-// ❌ Wrong: `https://api.mapbox.com/search/geocode/v6/forward?${encodedQuery}.json?`
-// ✅ Correct: `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?`
+// Simple types to represent essential parts of Mapbox directions response
+export interface RouteStep {
+	distance: number;
+	duration: number;
+	name: string;
+	maneuver: {
+		instruction?: string;
+		type?: string;
+		modifier?: string;
+		location: [number, number];
+	};
+}
 
-// The main issues in your code were:
-// - Using v6 endpoint (doesn't exist for standard geocoding)
-// - Using `/search/geocode/` path (wrong)
-// - Double `.json?` in URL
-// - `forward?` parameter (incorrect syntax)
+export interface RouteLeg {
+	summary: string;
+	weight: number;
+	duration: number;
+	distance: number;
+	steps: RouteStep[];
+}
 
-// ### 2. **Correct URL Structure**
-// ```
-// https://api.mapbox.com/geocoding/v5/mapbox.places/{search_text}.json
-// ```
+export interface RouteGeometry {
+	coordinates: [number, number][];
+	type: string;
+}
 
-// ### 3. **Query Parameters**
-// ```
-// ?access_token=YOUR_TOKEN
-// &limit=5
-// &country=in
-// &language=en
-// &types=place,locality,neighborhood,address,poi
+export interface RouteResult {
+	distance: number;
+	duration: number;
+	geometry: RouteGeometry;
+	legs: RouteLeg[];
+	// Keep raw route for future use if needed
+	raw?: any;
+}
+
+// directions cache to avoid duplicate calls in a short time
+const directionsCache: Map<string, RouteResult> = new Map();
+
+// Helper to build a cache key
+function directionsCacheKey(from: string, to: string) {
+	return `${from.trim().toLowerCase()}|${to.trim().toLowerCase()}`;
+}
+
+/**
+ * getDrivingDirections
+ * - Accepts `fromPlace` and `toPlace` as place name strings
+ * - Resolves each to coordinates using Geocode()
+ * - Calls Mapbox Directions API with `lon,lat;lon,lat` format
+ * - Returns the first route as RouteResult or null when not found
+ */
+export async function getDrivingDirections(
+	fromPlace: string,
+	toPlace: string
+): Promise<RouteResult | null> {
+	if (!MAPBOX_TOKEN) {
+		throw new Error('Mapbox token not provided (MAPBOX_TOKEN).');
+	}
+
+	// Use cache key
+	const cacheKey = directionsCacheKey(fromPlace, toPlace);
+	if (directionsCache.has(cacheKey)) {
+		return directionsCache.get(cacheKey)!;
+	}
+
+	try {
+		// Resolve place names to coordinates (limit 1)
+		const [fromData, toData] = await Promise.all([
+			Geocode(fromPlace, { limit: 1 }),
+			Geocode(toPlace, { limit: 1 })
+		]);
+
+		if (!fromData.length || !toData.length) {
+			console.warn('getDrivingDirections: unable to geocode one or both locations', {
+				fromPlace,
+				toPlace
+			});
+			return null;
+		}
+
+		const from = fromData[0];
+		const to = toData[0];
+
+		// Mapbox expects "lon,lat" pairs separated by semicolon
+		const fromCoords = `${from.lon},${from.lat}`;
+		const toCoords = `${to.lon},${to.lat}`;
+
+		// Build the directions URL
+		const url =
+			`${Env_data.DIRECTION_URL}/${encodeURIComponent(
+				fromCoords
+			)};${encodeURIComponent(toCoords)}?` +
+			`alternatives=true&geometries=geojson&language=en&overview=full&steps=true&` +
+			`access_token=${MAPBOX_TOKEN}`;
+
+		const resp = await fetch(url, {
+			headers: { Accept: 'application/json' }
+		});
+
+		if (!resp.ok) {
+			const errText = await resp.text();
+			console.error('Mapbox Directions API error:', errText);
+			throw new Error(`Mapbox directions error: ${resp.status}`);
+		}
+
+		const data = await resp.json();
+
+		if (!data.routes || data.routes.length === 0) {
+			console.warn('Mapbox Directions returned no routes', { fromCoords, toCoords });
+			return null;
+		}
+
+		const route = data.routes[0]; // choose first route
+		const result: RouteResult = {
+			distance: route.distance,
+			duration: route.duration,
+			geometry: route.geometry,
+			legs: route.legs,
+			raw: route
+		};
+
+		// Cache result (in-memory)
+		directionsCache.set(cacheKey, result);
+
+		return result;
+	} catch (err) {
+		console.error('Error in getDrivingDirections:', err);
+		return null;
+	}
+}
+
+// ------------------- Example usage -------------------
+// (remove or move to your calling code — kept here for reference)
+/*
+(async () => {
+	const route = await getDrivingDirections('Chennai International Airport', 'Coimbatore');
+	console.log('Route', route);
+})();
+*/

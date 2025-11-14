@@ -4,6 +4,8 @@
 	import { Tabs } from 'bits-ui';
 	import { Geocode, type GeocodeResult } from '$lib/geocode/geocode';
 	import TaxiService from '$lib/components/taxiService/taxiService.svelte';
+	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 
 	// One Way Trip State
 	let onewayPickupQuery = '';
@@ -20,6 +22,9 @@
 	let onewayDropoffDropdown = false;
 	let onewaySelectedDropoff: GeocodeResult | null = null;
 
+	let onewayPickupTime = '';
+	let onewaySubmitError: string | null = null;
+
 	// Round Trip State
 	let roundtripPickupQuery = '';
 	let roundtripPickupResults: GeocodeResult[] = [];
@@ -35,6 +40,10 @@
 	let roundtripDropoffDropdown = false;
 	let roundtripSelectedDropoff: GeocodeResult | null = null;
 
+	let roundtripPickupTime = '';
+	let roundtripReturnTime = '';
+	let roundtripSubmitError: string | null = null;
+
 	// Debounce timers
 	let onewayPickupTimer: ReturnType<typeof setTimeout>;
 	let onewayDropoffTimer: ReturnType<typeof setTimeout>;
@@ -46,7 +55,6 @@
 		const target = e.target as HTMLInputElement;
 		onewayPickupQuery = target.value;
 		onewayPickupDropdown = true;
-
 		clearTimeout(onewayPickupTimer);
 		onewayPickupTimer = setTimeout(() => searchOnewayPickup(), 300);
 	}
@@ -56,10 +64,8 @@
 			onewayPickupResults = [];
 			return;
 		}
-
 		onewayPickupLoading = true;
 		onewayPickupError = null;
-
 		try {
 			onewayPickupResults = await Geocode(onewayPickupQuery, { limit: 5 });
 		} catch (err) {
@@ -75,7 +81,7 @@
 		onewaySelectedPickup = item;
 		onewayPickupResults = [];
 		onewayPickupDropdown = false;
-		console.log('Oneway Pickup:', item);
+		console.log('Oneway Pickup Selected:', item);
 	}
 
 	// ONE WAY - Dropoff Functions
@@ -83,7 +89,6 @@
 		const target = e.target as HTMLInputElement;
 		onewayDropoffQuery = target.value;
 		onewayDropoffDropdown = true;
-
 		clearTimeout(onewayDropoffTimer);
 		onewayDropoffTimer = setTimeout(() => searchOnewayDropoff(), 300);
 	}
@@ -93,10 +98,8 @@
 			onewayDropoffResults = [];
 			return;
 		}
-
 		onewayDropoffLoading = true;
 		onewayDropoffError = null;
-
 		try {
 			onewayDropoffResults = await Geocode(onewayDropoffQuery, { limit: 5 });
 		} catch (err) {
@@ -112,7 +115,7 @@
 		onewaySelectedDropoff = item;
 		onewayDropoffResults = [];
 		onewayDropoffDropdown = false;
-		console.log('Oneway Dropoff:', item);
+		console.log('Oneway Dropoff Selected:', item);
 	}
 
 	// ROUND TRIP - Pickup Functions
@@ -120,7 +123,6 @@
 		const target = e.target as HTMLInputElement;
 		roundtripPickupQuery = target.value;
 		roundtripPickupDropdown = true;
-
 		clearTimeout(roundtripPickupTimer);
 		roundtripPickupTimer = setTimeout(() => searchRoundtripPickup(), 300);
 	}
@@ -130,10 +132,8 @@
 			roundtripPickupResults = [];
 			return;
 		}
-
 		roundtripPickupLoading = true;
 		roundtripPickupError = null;
-
 		try {
 			roundtripPickupResults = await Geocode(roundtripPickupQuery, { limit: 5 });
 		} catch (err) {
@@ -149,7 +149,7 @@
 		roundtripSelectedPickup = item;
 		roundtripPickupResults = [];
 		roundtripPickupDropdown = false;
-		console.log('Roundtrip Pickup:', item);
+		console.log('Roundtrip Pickup Selected:', item);
 	}
 
 	// ROUND TRIP - Dropoff Functions
@@ -157,7 +157,6 @@
 		const target = e.target as HTMLInputElement;
 		roundtripDropoffQuery = target.value;
 		roundtripDropoffDropdown = true;
-
 		clearTimeout(roundtripDropoffTimer);
 		roundtripDropoffTimer = setTimeout(() => searchRoundtripDropoff(), 300);
 	}
@@ -167,10 +166,8 @@
 			roundtripDropoffResults = [];
 			return;
 		}
-
 		roundtripDropoffLoading = true;
 		roundtripDropoffError = null;
-
 		try {
 			roundtripDropoffResults = await Geocode(roundtripDropoffQuery, { limit: 5 });
 		} catch (err) {
@@ -186,7 +183,7 @@
 		roundtripSelectedDropoff = item;
 		roundtripDropoffResults = [];
 		roundtripDropoffDropdown = false;
-		console.log('Roundtrip Dropoff:', item);
+		console.log('Roundtrip Dropoff Selected:', item);
 	}
 
 	// Click outside handler
@@ -200,22 +197,205 @@
 		}
 	}
 
+	// Validation helpers
+	function validateOneway(): { ok: boolean; message?: string } {
+		console.log('🔍 VALIDATING ONEWAY:');
+		console.log('  - onewaySelectedPickup:', onewaySelectedPickup);
+		console.log('  - onewaySelectedDropoff:', onewaySelectedDropoff);
+		console.log('  - onewayPickupTime:', onewayPickupTime);
+
+		if (!onewaySelectedPickup) {
+			console.log('  ❌ FAILED: No pickup location');
+			return { ok: false, message: 'Please select a pickup location.' };
+		}
+		console.log('  ✅ Pickup OK');
+
+		if (!onewaySelectedDropoff) {
+			console.log('  ❌ FAILED: No dropoff location');
+			return { ok: false, message: 'Please select a dropoff location.' };
+		}
+		console.log('  ✅ Dropoff OK');
+
+		if (!onewayPickupTime) {
+			console.log('  ❌ FAILED: No pickup time');
+			return { ok: false, message: 'Please select pickup date & time.' };
+		}
+		console.log('  ✅ Time OK');
+
+		const t = new Date(onewayPickupTime).getTime();
+		console.log('  - Parsed timestamp:', t);
+
+		if (isNaN(t)) {
+			console.log('  ❌ FAILED: Invalid timestamp');
+			return { ok: false, message: 'Invalid pickup date/time.' };
+		}
+		console.log('  ✅ Timestamp valid');
+
+		console.log('  ✅✅✅ VALIDATION PASSED!');
+		return { ok: true };
+	}
+
+	function validateRoundtrip(): { ok: boolean; message?: string } {
+		console.log('🔍 VALIDATING ROUNDTRIP:');
+		console.log('  - roundtripSelectedPickup:', roundtripSelectedPickup);
+		console.log('  - roundtripSelectedDropoff:', roundtripSelectedDropoff);
+		console.log('  - roundtripPickupTime:', roundtripPickupTime);
+		console.log('  - roundtripReturnTime:', roundtripReturnTime);
+
+		if (!roundtripSelectedPickup) {
+			console.log('  ❌ FAILED: No pickup location');
+			return { ok: false, message: 'Please select a pickup location.' };
+		}
+		console.log('  ✅ Pickup OK');
+
+		if (!roundtripSelectedDropoff) {
+			console.log('  ❌ FAILED: No dropoff location');
+			return { ok: false, message: 'Please select a dropoff location.' };
+		}
+		console.log('  ✅ Dropoff OK');
+
+		if (!roundtripPickupTime) {
+			console.log('  ❌ FAILED: No pickup time');
+			return { ok: false, message: 'Please select pickup date & time.' };
+		}
+		console.log('  ✅ Pickup time OK');
+
+		if (!roundtripReturnTime) {
+			console.log('  ❌ FAILED: No return time');
+			return { ok: false, message: 'Please select return date & time.' };
+		}
+		console.log('  ✅ Return time OK');
+
+		const t1 = new Date(roundtripPickupTime).getTime();
+		const t2 = new Date(roundtripReturnTime).getTime();
+		console.log('  - Pickup timestamp:', t1);
+		console.log('  - Return timestamp:', t2);
+
+		if (isNaN(t1) || isNaN(t2)) {
+			console.log('  ❌ FAILED: Invalid timestamps');
+			return { ok: false, message: 'Invalid date/time.' };
+		}
+		console.log('  ✅ Timestamps valid');
+
+		if (t2 <= t1) {
+			console.log('  ❌ FAILED: Return time not after pickup time');
+			return { ok: false, message: 'Return time must be after pickup time.' };
+		}
+		console.log('  ✅ Times in correct order');
+
+		console.log('  ✅✅✅ VALIDATION PASSED!');
+		return { ok: true };
+	}
+
 	// Submit handlers
 	function handleOnewaySubmit() {
-		console.log('Oneway Trip Submitted:', {
-			pickup: onewaySelectedPickup,
-			dropoff: onewaySelectedDropoff
-		});
-		// Add your submit logic here
+		console.log('🚀 Attempting oneway submit');
+
+		const v = validateOneway();
+		if (!v.ok) {
+			onewaySubmitError = v.message || 'Please fill required fields';
+			console.warn('❌ Validation failed:', v.message);
+			return;
+		}
+
+		onewaySubmitError = null;
+		console.log('✅ Validation passed!');
+
+		const tripData = {
+			tripType: 'oneway',
+			pickup: {
+				display_name: onewaySelectedPickup!.display_name,
+				lat: onewaySelectedPickup!.lat,
+				lon: onewaySelectedPickup!.lon
+			},
+			dropoff: {
+				display_name: onewaySelectedDropoff!.display_name,
+				lat: onewaySelectedDropoff!.lat,
+				lon: onewaySelectedDropoff!.lon
+			},
+			pickupDateAndTime: onewayPickupTime,
+			createdAt: Date.now()
+		};
+
+		try {
+			localStorage.setItem('tripData', JSON.stringify(tripData));
+			console.log('💾 Saved tripData:', tripData);
+			goto('/choose-vehicle');
+		} catch (e) {
+			console.error('❌ Failed to save:', e);
+			onewaySubmitError = 'Failed to save trip data. Please try again.';
+		}
 	}
 
 	function handleRoundtripSubmit() {
-		console.log('Roundtrip Submitted:', {
-			pickup: roundtripSelectedPickup,
-			dropoff: roundtripSelectedDropoff
-		});
-		// Add your submit logic here
+		console.log('🚀 Attempting roundtrip submit');
+
+		const v = validateRoundtrip();
+		if (!v.ok) {
+			roundtripSubmitError = v.message || 'Please fill required fields';
+			console.warn('❌ Validation failed:', v.message);
+			return;
+		}
+
+		roundtripSubmitError = null;
+		console.log('✅ Validation passed!');
+
+		const tripData = {
+			tripType: 'roundtrip',
+			pickup: {
+				display_name: roundtripSelectedPickup!.display_name,
+				lat: roundtripSelectedPickup!.lat,
+				lon: roundtripSelectedPickup!.lon
+			},
+			dropoff: {
+				display_name: roundtripSelectedDropoff!.display_name,
+				lat: roundtripSelectedDropoff!.lat,
+				lon: roundtripSelectedDropoff!.lon
+			},
+			pickupDateAndTime: roundtripPickupTime,
+			returnDateAndTime: roundtripReturnTime,
+			createdAt: Date.now()
+		};
+
+		try {
+			localStorage.setItem('tripData', JSON.stringify(tripData));
+			console.log('💾 Saved tripData:', tripData);
+			goto('/choose-vehicle');
+		} catch (e) {
+			console.error('❌ Failed to save:', e);
+			roundtripSubmitError = 'Failed to save trip data. Please try again.';
+		}
 	}
+
+	// Reactive validation
+	$: onewayValid = !!(onewaySelectedPickup && onewaySelectedDropoff && onewayPickupTime);
+	$: roundtripValid = !!(
+		roundtripSelectedPickup &&
+		roundtripSelectedDropoff &&
+		roundtripPickupTime &&
+		roundtripReturnTime
+	);
+
+	// Initialize on mount
+	onMount(() => {
+		console.log('🔄 Component mounted - clearing localStorage');
+		localStorage.removeItem('tripData');
+		localStorage.removeItem('vehicle-details');
+
+		// Reset all state
+		onewaySelectedPickup = null;
+		onewaySelectedDropoff = null;
+		onewayPickupQuery = '';
+		onewayDropoffQuery = '';
+		onewayPickupTime = '';
+
+		roundtripSelectedPickup = null;
+		roundtripSelectedDropoff = null;
+		roundtripPickupQuery = '';
+		roundtripDropoffQuery = '';
+		roundtripPickupTime = '';
+		roundtripReturnTime = '';
+	});
 </script>
 
 <svelte:window on:click={handleClickOutside} />
@@ -542,19 +722,27 @@
 								<input
 									id="pickup-time-oneway"
 									type="datetime-local"
+									bind:value={onewayPickupTime}
 									class="w-full border-0 bg-transparent p-0 text-xs text-gray-500 focus:ring-0 focus:outline-none sm:text-sm"
 								/>
 							</div>
 						</div>
 
 						<!-- Submit Button -->
-						<div class="flex items-end sm:col-span-2 lg:col-span-1">
-							<button
-								on:click={handleOnewaySubmit}
-								class="w-full rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 sm:px-8 sm:py-3 sm:text-base"
-							>
-								Submit
-							</button>
+						<!-- Submit Button -->
+						<div class="flex flex-col items-end sm:col-span-2 lg:col-span-1">
+							<div class="w-full">
+								{#if onewaySubmitError}
+									<div class="mb-2 text-sm text-red-600">{onewaySubmitError}</div>
+								{/if}
+								<button
+									on:click={handleOnewaySubmit}
+									disabled={!onewayValid}
+									class="w-full rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 sm:px-8 sm:py-3 sm:text-base"
+								>
+									Submit
+								</button>
+							</div>
 						</div>
 					</div>
 				</Tabs.Content>
@@ -798,6 +986,7 @@
 								<input
 									id="pickup-time-roundtrip"
 									type="datetime-local"
+									bind:value={roundtripPickupTime}
 									class="w-full border-0 bg-transparent p-0 text-xs text-gray-500 focus:ring-0 focus:outline-none sm:text-sm"
 								/>
 							</div>
@@ -831,6 +1020,8 @@
 								<input
 									id="return-time-roundtrip"
 									type="datetime-local"
+									bind:value={roundtripReturnTime}
+									min={roundtripPickupTime || undefined}
 									class="w-full border-0 bg-transparent p-0 text-xs text-gray-500 focus:ring-0 focus:outline-none sm:text-sm"
 								/>
 							</div>
@@ -838,12 +1029,18 @@
 
 						<!-- Submit Button -->
 						<div class="flex items-end sm:col-span-2 lg:col-span-1">
-							<button
-								on:click={handleRoundtripSubmit}
-								class="w-full rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 sm:px-8 sm:py-3 sm:text-base"
-							>
-								Submit
-							</button>
+							<div class="w-full">
+								{#if roundtripSubmitError}
+									<div class="mb-2 text-sm text-red-600">{roundtripSubmitError}</div>
+								{/if}
+								<button
+									on:click={handleRoundtripSubmit}
+									disabled={!roundtripValid}
+									class="w-full rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 sm:px-8 sm:py-3 sm:text-base"
+								>
+									Submit
+								</button>
+							</div>
 						</div>
 					</div>
 				</Tabs.Content>
