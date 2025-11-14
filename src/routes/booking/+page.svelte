@@ -1,4 +1,8 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { Env_data } from '$lib/constant/url.constant';
+	import { onMount } from 'svelte';
+
 	let formData = {
 		name: '',
 		contact: '',
@@ -7,25 +11,170 @@
 		pickupAddress: ''
 	};
 
-	const bookingDetails = {
-		bookType: 'One way',
-		carType: 'Hatchback',
-		carDescription: '2 Luggages | Maruti Wagon R, or Similar C...',
-		pickup: 'Chennai, Tamil Nadu, India',
-		drop: 'Madurai, Tamil Nadu, India',
-		bookedAt: '2025-11-12 12:53 AM'
+	let tripType = '';
+
+	let bookingDetails = {
+		bookType: '',
+		carType: '',
+		carDescription: '',
+		pickup: '',
+		drop: '',
+		bookedAt: '',
+		pickupDateAndTime: '',
+		returnDateAndTime: ''
 	};
 
-	const paymentDetails = {
-		baseFare: { km: 130, amount: 1690.0 },
-		additionalFare: { km: 326, amount: 4238.0 },
-		driverBata: { km: 400, amount: 600.0 },
-		total: 6528.0
+	let paymentDetails = {
+		baseFare: { km: 0, amount: 0 },
+		additionalFare: { km: 0, amount: 0 },
+		driverBata: { km: 0, amount: 0 },
+		total: 0
 	};
 
-	function handleSubmit() {
-		console.log('Booking submitted:', formData);
-		alert('Booking submitted successfully!');
+	// Dynamically load data from localStorage
+	onMount(() => {
+		try {
+			// Load tripData and vehicle-details safely
+			const trip = JSON.parse(localStorage.getItem('tripData') || 'null');
+			const vehicle = JSON.parse(localStorage.getItem('vehicle-details') || 'null');
+
+			if (!trip || !vehicle) {
+				console.warn('Missing tripData or vehicle-details in localStorage.');
+				return;
+			}
+
+			// Fill booking details safely
+			tripType = trip?.tripType || '';
+			bookingDetails.bookType = trip?.tripType === 'roundtrip' ? 'Round Trip' : 'One Way';
+			// Fill booking details safely
+			bookingDetails.bookType = trip?.tripType === 'roundtrip' ? 'Round Trip' : 'One Way';
+			bookingDetails.carType = vehicle?.car?.name ?? bookingDetails.carType;
+			bookingDetails.carDescription = vehicle?.car?.description ?? bookingDetails.carDescription;
+			bookingDetails.pickup =
+				trip?.pickup?.display_name ?? trip?.pickup?.text ?? bookingDetails.pickup;
+			bookingDetails.drop =
+				trip?.dropoff?.display_name ?? trip?.dropoff?.text ?? bookingDetails.drop;
+			bookingDetails.bookedAt = new Date().toLocaleString();
+
+			// Add pickup/return times
+			bookingDetails = {
+				...bookingDetails,
+				pickupDateAndTime: trip?.pickupDateAndTime ?? '',
+				returnDateAndTime: trip?.pickupDateAndTime ?? trip?.returnDateAndTime ?? ''
+			};
+
+			formData.pickupAddress =
+				trip?.pickup?.display_name ?? trip?.pickup?.text ?? formData.pickupAddress;
+
+			// Compute fares
+			const distance = Number(vehicle?.car?.distance ?? 0);
+			const rate = Number(vehicle?.car?.pricePerKm ?? 0);
+			const baseFareAmount = Math.round(distance * rate * 100) / 100;
+			const driverBataAmount = 400;
+			const extraKm = Number(vehicle?.extraKm ?? 0);
+			const extraFee = Number(vehicle?.extraFee ?? 0);
+			const totalAmount =
+				Math.round((baseFareAmount + driverBataAmount + (extraFee || 0)) * 100) / 100;
+
+			paymentDetails = {
+				baseFare: { km: distance, amount: baseFareAmount },
+				additionalFare: { km: extraKm, amount: extraFee },
+				driverBata: { km: 0, amount: driverBataAmount },
+				total: totalAmount
+			};
+		} catch (err) {
+			console.error('Error loading booking details from localStorage:', err);
+		}
+	});
+
+	function sendWhatsAppMessage() {
+		try {
+			const tripRaw = localStorage.getItem('tripData');
+			const vehicleRaw = localStorage.getItem('vehicle-details');
+
+			if (!tripRaw || !vehicleRaw) {
+				alert('Missing trip or vehicle details. Please complete your booking before sharing.');
+				return;
+			}
+
+			const trip = JSON.parse(tripRaw);
+			const vehicle = JSON.parse(vehicleRaw);
+
+			if (!trip?.pickup || !trip?.dropoff || !vehicle?.car) {
+				alert('Incomplete booking details. Please check your trip and vehicle selection.');
+				return;
+			}
+
+			const booking = {
+				bookType: trip?.tripType === 'roundtrip' ? 'Round Trip' : 'One Way',
+				pickup: trip?.pickup?.display_name || trip?.pickup?.text || 'Unknown',
+				drop: trip?.dropoff?.display_name || trip?.dropoff?.text || 'Unknown',
+				carType: vehicle?.car?.name || 'Unknown',
+				carCategory: vehicle?.car?.category || '—',
+				fare: vehicle?.car?.estimatedFare
+					? `₹${vehicle.car.estimatedFare.toFixed(2)}`
+					: 'Not calculated',
+				bookedAt: new Date().toLocaleString()
+			};
+
+			let pickupDateTimeLine = '';
+
+			if (trip.tripType === 'oneway') {
+				pickupDateTimeLine = `📅 *Pickup Date:* ${trip.pickupDateAndTime || '—'}`;
+			} else if (trip.tripType === 'roundtrip') {
+				pickupDateTimeLine = `📅 *Pickup Date:* ${trip.pickupDateAndTime || '—'}
+🔁 *Return Pickup Date:* ${trip.returnDateAndTime || '—'}`;
+			}
+
+			const driverBata = 400;
+
+			const message = `
+🚖 *Taxi Booking Details*
+------------------------------------
+📍 *Trip Type:* ${booking.bookType}
+🚗 *Car Type:* ${booking.carType} (${booking.carCategory})
+💰 *Estimated Fare:* ₹${booking.fare}
+📍 *Pickup:* ${booking.pickup}
+🏁 *Drop:* ${booking.drop}
+🕓 *Booked At:* ${booking.bookedAt}
+
+--------------  
+*Driver Fee:* ₹${driverBata}  
+*Extra Fee:* ₹${vehicle.extraFee}  
+*Extra Km:* ${vehicle.extraKm} km  
+*Total Km:* ${vehicle.totalDistance}  
+--------------  
+*Total Amount:* ₹${paymentDetails.total}
+
+${pickupDateTimeLine}
+
+--- Booker details ---
+👤 *Name:* ${formData.name}
+📱 *Contact:* ${formData.contact}
+📱 *Contact 2:* ${formData.contact2 || '—'}
+✉️ *Email:* ${formData.email}
+
+------------------------------------
+Thank you for booking with us!`;
+
+			const encodedMessage = encodeURIComponent(message);
+			const whatsAppUrl = `${Env_data.WHATSAPP_LINK}=${encodedMessage}`;
+
+			// ✅ Step 2A: Open WhatsApp (user moves to next screen)
+			window.open(whatsAppUrl, '_blank');
+
+			// ✅ Step 2B: Clear localStorage only after sending/redirecting
+			setTimeout(() => {
+				localStorage.removeItem('tripData');
+				localStorage.removeItem('vehicle-details');
+				console.log('Cleared tripData and vehicle-details after booking.');
+			}, 2000);
+
+			goto('/');
+		} catch (err) {
+			console.error('Error preparing WhatsApp message:', err);
+			alert('Failed to prepare WhatsApp message.');
+		}
 	}
 
 	function handleBack() {
@@ -106,14 +255,28 @@
 					>
 				</div>
 
-				<div class="flex items-center justify-between border-t border-gray-100 pt-3">
-					<div>
-						<span class="text-sm font-medium text-gray-700">Additional Fare</span>
-						<span class="ml-1 text-xs text-gray-500">[{paymentDetails.additionalFare.km} Km]</span>
+				<div class="flex flex-col border-t border-gray-100 pt-3">
+					<!-- Always show label and amount -->
+					<div class="flex items-center justify-between">
+						<div>
+							<span class="text-sm font-medium text-gray-700">Additional Fare</span>
+							<span class="ml-1 text-xs text-gray-500">
+								[{paymentDetails.additionalFare.km} km]
+							</span>
+						</div>
+
+						<span class="text-sm font-semibold text-gray-900">
+							₹ {paymentDetails.additionalFare.amount.toFixed(2)}
+						</span>
 					</div>
-					<span class="text-sm font-semibold text-gray-900"
-						>₹ {paymentDetails.additionalFare.amount.toFixed(2)}</span
-					>
+
+					<!-- Only show message if extra fare applies -->
+					{#if paymentDetails.additionalFare.km > 0}
+						<p class="mt-1 text-xs text-gray-500 italic">
+							Extra {tripType === 'roundtrip' ? 'round trip' : 'one way'} distance — ₹13/km applied for
+							{paymentDetails.additionalFare.km} km.
+						</p>
+					{/if}
 				</div>
 
 				<div class="flex items-center justify-between border-t border-gray-100 pt-3">
@@ -124,6 +287,14 @@
 					<span class="text-sm font-semibold text-gray-900"
 						>₹ {paymentDetails.driverBata.amount.toFixed(2)}</span
 					>
+				</div>
+
+				<div class="flex items-center justify-between border-t border-gray-100 pt-3">
+					<div>
+						<span class="text-sm font-medium text-gray-700">Toll Fee</span>
+						<span class="ml-1 text-xs text-gray-500">[upto your drop location in-between Km]</span>
+					</div>
+					<span class="text-sm font-semibold text-gray-900">Extra fee</span>
 				</div>
 
 				<!-- Total Amount -->
@@ -139,7 +310,7 @@
 			<div class="mt-6 rounded-lg border border-red-200 bg-red-50 p-4">
 				<p class="text-sm text-gray-700">
 					<span class="font-semibold">Note:</span> The actual bill amount might differ based on actual
-					KMs travelled, Waiting time (for Oneway only), Hill-station charges, Inter-state Permits,Toll
+					KMs travel, Waiting time (for Oneway only), Hill-station charges, Inter-state Permits,Toll
 					Charges etc.
 				</p>
 			</div>
@@ -149,7 +320,7 @@
 		<div class="rounded-lg bg-white p-6 shadow-sm">
 			<h2 class="mb-6 text-2xl font-bold text-gray-900">Make Your Booking</h2>
 
-			<form onsubmit={handleSubmit} class="space-y-5">
+			<form onsubmit={sendWhatsAppMessage} class="space-y-5">
 				<!-- Name -->
 				<div>
 					<label for="name" class="mb-2 block text-sm font-medium text-gray-700">
