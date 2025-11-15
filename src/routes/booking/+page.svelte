@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { Env_data } from '$lib/constant/url.constant';
 	import { onMount } from 'svelte';
+	import { toast } from 'svelte-sonner';
 
 	let formData = {
 		name: '',
@@ -93,7 +94,9 @@
 			const vehicleRaw = localStorage.getItem('vehicle-details');
 
 			if (!tripRaw || !vehicleRaw) {
-				alert('Missing trip or vehicle details. Please complete your booking before sharing.');
+				toast.warning(
+					'Missing trip or vehicle details. Please complete your booking before sharing.'
+				);
 				return;
 			}
 
@@ -101,7 +104,9 @@
 			const vehicle = JSON.parse(vehicleRaw);
 
 			if (!trip?.pickup || !trip?.dropoff || !vehicle?.car) {
-				alert('Incomplete booking details. Please check your trip and vehicle selection.');
+				toast.warning(
+					"Incomplete booking details. Please check your trip and vehicle selection.');"
+				);
 				return;
 			}
 
@@ -173,7 +178,7 @@ Thank you for booking with us!`;
 			goto('/');
 		} catch (err) {
 			console.error('Error preparing WhatsApp message:', err);
-			alert('Failed to prepare WhatsApp message.');
+			toast.error('Failed to prepare WhatsApp message.');
 		}
 	}
 

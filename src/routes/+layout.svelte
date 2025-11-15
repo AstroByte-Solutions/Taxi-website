@@ -3,9 +3,9 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import Navbar from '$lib/components/navbar.svelte';
 	import Footer from '$lib/components/footer.svelte';
+	import { Toaster } from 'svelte-sonner';
 
 	let { children } = $props();
-	let mobileMenuOpen = $state(false);
 </script>
 
 <svelte:head>
@@ -18,12 +18,24 @@
 	/>
 </svelte:head>
 
-<!-- Sticky Navbar -->
-
+<Toaster position="top-right" />
 <Navbar />
 
-<!-- Main Content -->
-<main class="min-h-screen w-full overflow-x-hidden">
+<main class="w-full">
 	{@render children?.()}
 </main>
+
 <Footer />
+
+<style>
+	:global(html, body) {
+		overflow-x: hidden;
+		max-width: 100vw;
+		margin: 0;
+		padding: 0;
+	}
+
+	:global(body) {
+		overflow-y: auto;
+	}
+</style>

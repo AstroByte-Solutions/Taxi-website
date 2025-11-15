@@ -6,10 +6,10 @@
 	import Star from '$lib/icons/star.svelte';
 	import Transimission from '$lib/icons/transimission.svelte';
 	import { onMount } from 'svelte';
+	import { toast } from 'svelte-sonner';
 
 	type TripType = 'oneway' | 'roundtrip';
 
-	// Car type now holds separate rates for oneway & roundtrip
 	interface Car {
 		id: number;
 		imageLink: string;
@@ -22,20 +22,17 @@
 		doors: number;
 		category: string;
 		priceUnit: string;
-		onewayRatePerKm: number; // rate used for oneway
-		roundtripRatePerKm: number; // rate used for roundtrip
-		// computed later
-		distance?: number; // base distance (one-way straight line)
-		pricePerKm?: number; // effective per-km rate used
-		estimatedFare?: number; // computed total fare
+		onewayRatePerKm: number;
+		roundtripRatePerKm: number;
+		distance?: number;
+		pricePerKm?: number;
+		estimatedFare?: number;
 		pickupDateAndTime?: string;
 		returnDateAndTime?: string;
-
 		extraKm?: number;
 		extraFee?: number;
 	}
 
-	// make cars mutable (let) so we can map/update
 	let cars: Car[] = [
 		{
 			id: 1,
@@ -50,8 +47,8 @@
 			doors: 4,
 			priceUnit: 'day',
 			category: 'Sedan',
-			onewayRatePerKm: 14, // example from tariff: Rs.14/km one way
-			roundtripRatePerKm: 13 // Rs.13/km round trip
+			onewayRatePerKm: 14,
+			roundtripRatePerKm: 13
 		},
 		{
 			id: 2,
@@ -107,7 +104,6 @@
 		window.history.back();
 	}
 
-	// ---------- Distance Calculation ----------
 	interface LocationPoint {
 		lat: number | string;
 		lon: number | string;
@@ -132,152 +128,151 @@
 		return (degrees * Math.PI) / 180;
 	}
 
-	// ---------- Main Fare Logic ----------
 	let tripType: TripType = 'oneway';
-	let distanceKm = 0; // one-way straight line distance
+	let distanceKm = 0;
+	let selectedCarId: number | null = null;
 
 	onMount(() => {
+		const loadingToast = toast.loading('Loading trip details...');
+
 		try {
 			const raw = localStorage.getItem('tripData');
-			if (!raw) return;
+			if (!raw) {
+				toast.dismiss(loadingToast);
+				toast.error('No trip data found', {
+					description: 'Please start by selecting your trip details on the home page.',
+					action: {
+						label: 'Go Home',
+						onClick: () => goto('/')
+					}
+				});
+				setTimeout(() => goto('/'), 2000);
+				return;
+			}
+
 			const parsed = JSON.parse(raw);
 			const pickup = parsed?.pickup;
 			const dropoff = parsed?.dropoff;
 			const savedType: TripType = parsed?.tripType || 'oneway';
-			if (!pickup || !dropoff) return;
+
+			if (!pickup || !dropoff) {
+				toast.dismiss(loadingToast);
+				toast.error('Invalid trip data', {
+					description: 'Pickup or dropoff location is missing.'
+				});
+				return;
+			}
 
 			tripType = savedType;
-			// compute one-way straight-line distance
 			distanceKm = calculateDistanceInKm(
 				{ lat: pickup.lat, lon: pickup.lon },
 				{ lat: dropoff.lat, lon: dropoff.lon }
 			);
 
 			updateFare();
+
+			toast.dismiss(loadingToast);
+			toast.success('Trip loaded successfully!', {
+				description: `${distanceKm} km ${tripType} journey calculated.`
+			});
 		} catch (err) {
-			console.error('Failed to calculate trip distance:', err);
+			toast.dismiss(loadingToast);
+			toast.error('Failed to load trip details', {
+				description: err instanceof Error ? err.message : 'Unknown error occurred'
+			});
+			console.error('Error loading trip:', err);
 		}
 	});
 
-	// Recompute when user toggles tripType
 	$: (tripType, updateFare());
-
-	// this will hold id of car user previously selected (if any)
-	let selectedCarId: number | null = null;
-
-	/**
-	 * Recalculate each car's effective per-km and estimated fare.
-	 * Rules:
-	 * - if tripType === 'oneway' => use onewayRatePerKm and distance = distanceKm
-	 * - if tripType === 'roundtrip' => use roundtripRatePerKm and distance = distanceKm * 2
-	 */
 
 	function updateFare() {
 		const isRound = tripType === 'roundtrip';
-		const baseDistance = distanceKm; // one-way straight-line
+		const baseDistance = distanceKm;
 		const adjustedDistance = isRound ? baseDistance * 2 : baseDistance;
 		const threshold = isRound ? 250 : 150;
 
 		cars = cars.map((car) => {
 			const baseRate = Number(isRound ? car.roundtripRatePerKm : car.onewayRatePerKm);
 			const dist = Number(adjustedDistance);
-
-			// fractional extraKm allowed — you can use Math.ceil if you want whole kms
 			const extraKm = Math.max(0, dist - threshold);
 			const extraFee = Number((extraKm * 13).toFixed(2));
-
-			// IMPORTANT: estimatedFare for the vehicle-list = BASE FARE ONLY (no extraFee)
 			const baseFare = baseRate * dist;
-			const estimatedFare = Number(baseFare.toFixed(2)); // keep paise, show this on vehicle cards
+			const estimatedFare = Number(baseFare.toFixed(2));
 
 			return {
 				...car,
 				pricePerKm: baseRate,
-				estimatedFare, // base fare only (vehicle screen)
-				distance: Number(dist.toFixed(2)), // numeric
+				estimatedFare,
+				distance: Number(dist.toFixed(2)),
 				extraKm: Number(extraKm.toFixed(2)),
 				extraFee
 			};
 		});
+
+		// Show toast when trip type changes
+		if (distanceKm > 0) {
+			toast.info(`Switched to ${tripType}`, {
+				description: `Prices updated for ${isRound ? adjustedDistance : distanceKm} km journey.`
+			});
+		}
 	}
 
-	/**
-	 * Called when user clicks Book Now on a car card.
-	 * - Ensures tripType in localStorage.tripData matches current UI tripType (and updates it only if changed).
-	 * - Stores the selected car + trip info under "vehicle-details".
-	 * - Navigates to next step (change path as needed).
-	 */
 	function handleBookNow(car: Car) {
+		const bookingToast = toast.loading(`Booking ${car.name}...`);
+
 		try {
-			// 1) read tripData from localStorage
 			const raw = localStorage.getItem('tripData');
 			if (!raw) {
-				console.error('No tripData in localStorage');
+				toast.dismiss(bookingToast);
+				toast.error('Trip data not found', {
+					description: 'Please start from the home page.'
+				});
 				return;
 			}
+
 			const tripData = JSON.parse(raw);
 
-			// 2) tripType consistency check — send user back to home if mismatch
 			if (tripData?.tripType && tripData.tripType !== tripType) {
-				const ok = confirm(
-					`The trip type you selected on the home screen is "${tripData.tripType}", ` +
-						`but you are trying to book a vehicle as "${tripType}".\n\n` +
-						`To avoid mismatched fares, please go back and correct your trip type.\n\n` +
-						`Press OK to return to home, or Cancel to stay here.`
-				);
-				if (ok) {
-					goto('/'); // adjust if your app's home route differs
-				}
+				toast.dismiss(bookingToast);
+				toast.warning('Trip type mismatch detected!', {
+					description: `Your original selection was "${tripData.tripType}" but you're viewing "${tripType}" rates.`,
+					action: {
+						label: 'Go Back',
+						onClick: () => goto('/')
+					},
+					duration: 6000
+				});
 				return;
 			}
 
-			// 3) core fare calculation (canonical numeric values, 2-decimal)
 			const isRound = tripType === 'roundtrip';
-
-			// distance to use: prefer car.distance (computed earlier) else fallback to global distanceKm
 			const dist = Number(car.distance ?? distanceKm);
-			// totalDistance used for pricing (roundtrip doubles one-way)
 			const totalDistance = isRound ? dist * 2 : dist;
-
-			// threshold rules
 			const threshold = isRound ? 250 : 150;
-
-			// extra km (fractional allowed). Use Math.max so we never store negatives.
 			const extraKm = Math.max(0, totalDistance - threshold);
-			const extraFee = Number((extraKm * 13).toFixed(2)); // ₹13/km, keep paise
-
-			// price per km: prefer car.pricePerKm if set (from updateFare), otherwise fallback to rate constants
+			const extraFee = Number((extraKm * 13).toFixed(2));
 			const pricePerKm = Number(
 				car.pricePerKm ?? (isRound ? car.roundtripRatePerKm : car.onewayRatePerKm)
 			);
-
-			// base fare and total fare with two decimals
 			const baseFareRaw = pricePerKm * totalDistance;
-			// IMPORTANT: vehicle-details.estimatedFare = BASE FARE (vehicle screen shows this)
 			const estimatedFareBaseOnly = Number(baseFareRaw.toFixed(2));
-			// totalFare (booking screen can compute/show): base + extraFee
 			const totalFareWithExtra = Number((baseFareRaw + extraFee).toFixed(2));
-
-			// 4) pickup/return times pulled from tripData (if available)
 			const pickupDateAndTime = tripData?.pickupDateAndTime ?? null;
 			const returnDateAndTime = isRound ? (tripData?.returnDateAndTime ?? null) : null;
 
-			// 5) assemble vehicle-details object (canonical numbers)
 			const vehicleDetails = {
 				selectedAt: Date.now(),
 				tripType,
 				totalDistance: Number(totalDistance.toFixed(2)),
 				extraKm: Number(extraKm.toFixed(2)),
 				extraFee,
-				// keep both base-only estimatedFare and full total if helpful
 				estimatedTotalIfCharged: totalFareWithExtra,
 				car: {
 					...car,
 					pricePerKm,
 					distance: Number(dist.toFixed(2)),
-					// this is what the vehicle list shows (base only)
 					estimatedFare: estimatedFareBaseOnly,
-					// breakdown to be shown on booking screen
 					rawFareComponents: {
 						baseFare: Number(baseFareRaw.toFixed(2)),
 						extraFee
@@ -287,18 +282,27 @@
 				}
 			};
 
-			// 6) persist to localStorage so booking screen uses same canonical numbers
 			localStorage.setItem('vehicle-details', JSON.stringify(vehicleDetails));
-			console.log('Saved vehicle-details to localStorage:', vehicleDetails);
-
-			// 7) update local UI state and navigate to booking
 			selectedCarId = car.id;
-			goto('/booking');
 
-			// NOTE:
-			// Do NOT clear localStorage here. Clear tripData & vehicle-details only from the Booking page
-			// after the user finishes the booking (e.g. on sendWhatsAppMessage / confirm).
+			toast.dismiss(bookingToast);
+			toast.success(`${car.name} selected!`, {
+				description: `Total fare: ₹${estimatedFareBaseOnly}. Proceeding to booking...`,
+				duration: 2000
+			});
+
+			setTimeout(() => {
+				goto('/booking');
+			}, 500);
 		} catch (err) {
+			toast.dismiss(bookingToast);
+			toast.error('Booking failed', {
+				description: err instanceof Error ? err.message : 'An unexpected error occurred',
+				action: {
+					label: 'Retry',
+					onClick: () => handleBookNow(car)
+				}
+			});
 			console.error('handleBookNow error:', err);
 		}
 	}
@@ -412,9 +416,7 @@
 
 					<button
 						class="mt-4 w-full rounded-lg bg-primary py-3.5 text-white transition-all hover:bg-primary/90 active:scale-[0.98]"
-						onclick={() => {
-							handleBookNow(car);
-						}}
+						onclick={() => handleBookNow(car)}
 					>
 						Book Now
 					</button>
