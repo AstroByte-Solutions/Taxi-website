@@ -1,5 +1,5 @@
 <script lang="ts">
-	import LocationSearchInput from './LocationSearchInput.svelte';
+	import LocationSearchInput from './locationSearchInput.svelte';
 	import type { GeocodeResult } from '$lib/geocode/geocode';
 	import { goto } from '$app/navigation';
 

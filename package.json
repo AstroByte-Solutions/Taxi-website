@@ -46,6 +46,7 @@
 	},
 	"dependencies": {
 		"bits-ui": "^2.14.1",
+		"gasp": "^0.0.2",
 		"gsap": "^3.13.0",
 		"svelte-sonner": "^1.0.6"
 	}
