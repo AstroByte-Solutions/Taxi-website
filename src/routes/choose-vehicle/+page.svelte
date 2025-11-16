@@ -190,27 +190,29 @@
 		const isRound = tripType === 'roundtrip';
 		const baseDistance = distanceKm;
 		const adjustedDistance = isRound ? baseDistance * 2 : baseDistance;
-		const threshold = isRound ? 250 : 150;
+		const threshold = isRound ? 250 : 130;
 
 		cars = cars.map((car) => {
 			const baseRate = Number(isRound ? car.roundtripRatePerKm : car.onewayRatePerKm);
-			const dist = Number(adjustedDistance);
+			const dist = Number(adjustedDistance); // Calculate only threshold distance for UI display
+
+			const displayDistance = Math.min(dist, threshold);
 			const extraKm = Math.max(0, dist - threshold);
-			const extraFee = Number((extraKm * 13).toFixed(2));
-			const baseFare = baseRate * dist;
-			const estimatedFare = Number(baseFare.toFixed(2));
+			const extraFee = Number((extraKm * 13).toFixed(2)); // Display fare: only up to threshold
+
+			const displayFare = Number((baseRate * displayDistance).toFixed(2));
 
 			return {
 				...car,
 				pricePerKm: baseRate,
-				estimatedFare,
-				distance: Number(dist.toFixed(2)),
+				estimatedFare: displayFare, // Shows only threshold amount
+				distance: Number(dist.toFixed(2)), // Total distance
+				displayDistance: Number(displayDistance.toFixed(2)), // For reference
 				extraKm: Number(extraKm.toFixed(2)),
-				extraFee
+				extraFee // Hidden from UI, used in booking
 			};
-		});
+		}); // Show toast when trip type changes
 
-		// Show toast when trip type changes
 		if (distanceKm > 0) {
 			toast.info(`Switched to ${tripType}`, {
 				description: `Prices updated for ${isRound ? adjustedDistance : distanceKm} km journey.`
@@ -247,17 +249,20 @@
 			}
 
 			const isRound = tripType === 'roundtrip';
-			const dist = Number(car.distance ?? distanceKm);
-			const totalDistance = isRound ? dist * 2 : dist;
-			const threshold = isRound ? 250 : 150;
-			const extraKm = Math.max(0, totalDistance - threshold);
-			const extraFee = Number((extraKm * 13).toFixed(2));
+			const totalDistance = Number(car.distance ?? distanceKm);
+			const threshold = isRound ? 250 : 130;
+			const extraKm = Number(car.extraKm ?? Math.max(0, totalDistance - threshold));
+			const extraFee = Number(car.extraFee ?? extraKm * 13);
+
 			const pricePerKm = Number(
 				car.pricePerKm ?? (isRound ? car.roundtripRatePerKm : car.onewayRatePerKm)
-			);
-			const baseFareRaw = pricePerKm * totalDistance;
-			const estimatedFareBaseOnly = Number(baseFareRaw.toFixed(2));
-			const totalFareWithExtra = Number((baseFareRaw + extraFee).toFixed(2));
+			); // Base fare: only up to threshold
+
+			const baseFareUpToThreshold = pricePerKm * Math.min(totalDistance, threshold);
+			const displayedFare = Number(baseFareUpToThreshold.toFixed(2)); // Total fare: base + extra
+
+			const totalFareWithExtra = Number((baseFareUpToThreshold + extraFee).toFixed(2));
+
 			const pickupDateAndTime = tripData?.pickupDateAndTime ?? null;
 			const returnDateAndTime = isRound ? (tripData?.returnDateAndTime ?? null) : null;
 
@@ -265,17 +270,20 @@
 				selectedAt: Date.now(),
 				tripType,
 				totalDistance: Number(totalDistance.toFixed(2)),
+				threshold,
 				extraKm: Number(extraKm.toFixed(2)),
-				extraFee,
-				estimatedTotalIfCharged: totalFareWithExtra,
+				extraFee: Number(extraFee.toFixed(2)),
+				baseFare: displayedFare, // What user saw on card
+				totalFare: totalFareWithExtra, // With extra km charges
 				car: {
 					...car,
 					pricePerKm,
-					distance: Number(dist.toFixed(2)),
-					estimatedFare: estimatedFareBaseOnly,
+					distance: Number(totalDistance.toFixed(2)),
+					estimatedFare: displayedFare, // UI display amount
 					rawFareComponents: {
-						baseFare: Number(baseFareRaw.toFixed(2)),
-						extraFee
+						baseFareUpToThreshold: displayedFare,
+						extraKmCharge: Number(extraFee.toFixed(2)),
+						totalWithExtra: totalFareWithExtra
 					},
 					pickupDateAndTime,
 					returnDateAndTime
@@ -285,11 +293,19 @@
 			localStorage.setItem('vehicle-details', JSON.stringify(vehicleDetails));
 			selectedCarId = car.id;
 
-			toast.dismiss(bookingToast);
-			toast.success(`${car.name} selected!`, {
-				description: `Total fare: ₹${estimatedFareBaseOnly}. Proceeding to booking...`,
-				duration: 2000
-			});
+			toast.dismiss(bookingToast); // Show different message based on whether there are extra charges
+
+			if (extraKm > 0) {
+				toast.success(`${car.name} selected!`, {
+					description: `Base fare: ₹${displayedFare} (+₹${extraFee} for ${extraKm}km extra). Total: ₹${totalFareWithExtra}`,
+					duration: 3000
+				});
+			} else {
+				toast.success(`${car.name} selected!`, {
+					description: `Total fare: ₹${displayedFare}. Proceeding to booking...`,
+					duration: 2000
+				});
+			}
 
 			setTimeout(() => {
 				goto('/booking');
