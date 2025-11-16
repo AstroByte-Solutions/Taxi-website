@@ -7,7 +7,6 @@
 	import { onMount } from 'svelte';
 
 	onMount(() => {
-		console.log('🔄 Component mounted - clearing localStorage');
 		localStorage.removeItem('tripData');
 		localStorage.removeItem('vehicle-details');
 	});

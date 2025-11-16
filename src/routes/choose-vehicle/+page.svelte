@@ -172,7 +172,7 @@
 			updateFare();
 
 			toast.dismiss(loadingToast);
-			toast.success('Trip loaded successfully!', {
+			toast.info('Trip loaded successfully!', {
 				description: `${distanceKm} km ${tripType} journey calculated.`
 			});
 		} catch (err) {
@@ -415,7 +415,6 @@
 							</div>
 							<span class="text-sm font-semibold text-blue-900">₹{car.pricePerKm}/km</span>
 						</div>
-						<p class="mt-1 text-xs text-blue-700">₹{car.pricePerKm}/km</p>
 					</div>
 
 					<!-- Daily Price -->
