@@ -1,6 +1,9 @@
 <script lang="ts">
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import Navbar from '$lib/components/navbar.svelte';
+	import Footer from '$lib/components/footer.svelte';
+	import { Toaster } from 'svelte-sonner';
 
 	let { children } = $props();
 </script>
@@ -15,4 +18,24 @@
 	/>
 </svelte:head>
 
-{@render children?.()}
+<Toaster position="top-right" richColors />
+<Navbar />
+
+<main class="w-full">
+	{@render children?.()}
+</main>
+
+<Footer />
+
+<style>
+	:global(html, body) {
+		overflow-x: hidden;
+		max-width: 100vw;
+		margin: 0;
+		padding: 0;
+	}
+
+	:global(body) {
+		overflow-y: auto;
+	}
+</style>

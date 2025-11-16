@@ -1,0 +1,8 @@
+export const Env_data = {
+	MAPBOX_TOKEN: import.meta.env.VITE_MAPBOX_TOKEN,
+	GEOCODE_URL: import.meta.env.VITE_GEOCODE_URL,
+	COUNTRY_CODE: import.meta.env.VITE_COUNTRY_CODE,
+	WHATSAPP_NUMBER: import.meta.env.VITE_WHATSAPP_PHONE,
+	WHATSAPP_LINK: import.meta.env.VITE_WHATSAPP_LINK,
+	DIRECTION_URL: import.meta.env.VITE_MAPBOX_DIRECTION_URL
+};
