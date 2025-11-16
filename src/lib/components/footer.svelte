@@ -14,7 +14,7 @@
 			<div class="flex justify-center md:justify-start">
 				<div class="flex items-center gap-2">
 					<Logo class="stroke-white" fill="#ffffff" />
-					<h1 class="text-lg font-semibold">Rental Car</h1>
+					<h1 class="text-lg font-semibold">Hello Drop Taxi</h1>
 				</div>
 			</div>
 
