@@ -35,11 +35,11 @@
 			<div class="flex flex-col justify-center gap-4 sm:flex-row lg:justify-start">
 				<div class="flex items-center justify-center gap-2 lg:justify-start">
 					<Map />
-					<p class="text-sm">123 Main Street, City, Country</p>
+					<p class="text-sm">Trichy,Tamil Nadu, India</p>
 				</div>
 				<div class="flex items-center justify-center gap-2 lg:justify-start">
 					<Phone />
-					<p class="text-sm">+1 (234) 567-8901</p>
+					<p class="text-sm">+91-9361417837</p>
 				</div>
 			</div>
 
