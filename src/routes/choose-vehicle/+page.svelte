@@ -131,21 +131,51 @@
 	let tripType: TripType = 'oneway';
 	let distanceKm = 0;
 	let selectedCarId: number | null = null;
+	let isInitialized = false;
+	let previousTripType: TripType | null = null;
+
+	// Safe toast helper to prevent race conditions
+	function safeToast(type: 'info' | 'error' | 'success' | 'warning', title: string, options?: any) {
+		// Add a small delay to prevent toast conflicts
+		setTimeout(() => {
+			try {
+				toast[type](title, options);
+			} catch (err) {
+				console.error('Toast error:', err);
+			}
+		}, 50);
+	}
 
 	onMount(() => {
-		const loadingToast = toast.loading('Loading trip details...');
+		let loadingToastId: string | number | undefined;
+
+		try {
+			loadingToastId = toast.loading('Loading trip details...');
+		} catch (err) {
+			console.error('Loading toast error:', err);
+		}
 
 		try {
 			const raw = localStorage.getItem('tripData');
 			if (!raw) {
-				toast.dismiss(loadingToast);
-				toast.error('No trip data found', {
-					description: 'Please start by selecting your trip details on the home page.',
-					action: {
-						label: 'Go Home',
-						onClick: () => goto('/')
+				if (loadingToastId) {
+					try {
+						toast.dismiss(loadingToastId);
+					} catch (err) {
+						console.error('Dismiss toast error:', err);
 					}
-				});
+				}
+
+				setTimeout(() => {
+					toast.error('No trip data found', {
+						description: 'Please start by selecting your trip details on the home page.',
+						action: {
+							label: 'Go Home',
+							onClick: () => goto('/')
+						}
+					});
+				}, 100);
+
 				setTimeout(() => goto('/'), 2000);
 				return;
 			}
@@ -156,14 +186,24 @@
 			const savedType: TripType = parsed?.tripType || 'oneway';
 
 			if (!pickup || !dropoff) {
-				toast.dismiss(loadingToast);
-				toast.error('Invalid trip data', {
-					description: 'Pickup or dropoff location is missing.'
-				});
+				if (loadingToastId) {
+					try {
+						toast.dismiss(loadingToastId);
+					} catch (err) {
+						console.error('Dismiss toast error:', err);
+					}
+				}
+
+				setTimeout(() => {
+					toast.error('Invalid trip data', {
+						description: 'Pickup or dropoff location is missing.'
+					});
+				}, 100);
 				return;
 			}
 
 			tripType = savedType;
+			previousTripType = savedType;
 			distanceKm = calculateDistanceInKm(
 				{ lat: pickup.lat, lon: pickup.lon },
 				{ lat: dropoff.lat, lon: dropoff.lon }
@@ -171,63 +211,114 @@
 
 			updateFare();
 
-			toast.dismiss(loadingToast);
-			toast.info('Trip loaded successfully!', {
-				description: `${distanceKm} km ${tripType} journey calculated.`
-			});
+			if (loadingToastId) {
+				try {
+					toast.dismiss(loadingToastId);
+				} catch (err) {
+					console.error('Dismiss toast error:', err);
+				}
+			}
+
+			setTimeout(() => {
+				toast.info('Trip loaded successfully!', {
+					description: `${distanceKm} km ${tripType} journey calculated.`
+				});
+				// Mark as initialized after everything is settled
+				isInitialized = true;
+			}, 150);
 		} catch (err) {
-			toast.dismiss(loadingToast);
-			toast.error('Failed to load trip details', {
-				description: err instanceof Error ? err.message : 'Unknown error occurred'
-			});
+			if (loadingToastId) {
+				try {
+					toast.dismiss(loadingToastId);
+				} catch (e) {
+					console.error('Dismiss toast error:', e);
+				}
+			}
+
+			setTimeout(() => {
+				toast.error('Failed to load trip details', {
+					description: err instanceof Error ? err.message : 'Unknown error occurred'
+				});
+			}, 100);
+
 			console.error('Error loading trip:', err);
 		}
 	});
 
-	$: (tripType, updateFare());
+	// Watch for trip type changes AFTER initialization
+	$: if (isInitialized && tripType !== previousTripType && previousTripType !== null) {
+		previousTripType = tripType;
+		updateFare();
+		showTripTypeToast();
+	}
+
+	function showTripTypeToast() {
+		if (distanceKm === 0) return;
+
+		const isRound = tripType === 'roundtrip';
+		const adjustedDistance = isRound ? distanceKm * 2 : distanceKm;
+		const threshold = isRound ? 250 : 130;
+		const minKmNote =
+			adjustedDistance < threshold ? ` (Minimum ${threshold}km charge applies)` : '';
+
+		safeToast('info', `Switched to ${tripType}`, {
+			description: `Prices for ${adjustedDistance}km journey${minKmNote}`
+		});
+	}
 
 	function updateFare() {
+		if (distanceKm === 0) return;
+
 		const isRound = tripType === 'roundtrip';
 		const baseDistance = distanceKm;
 		const adjustedDistance = isRound ? baseDistance * 2 : baseDistance;
 		const threshold = isRound ? 250 : 130;
 
+		const extraRate = tripType === 'roundtrip' ? 13 : 14;
+
 		cars = cars.map((car) => {
 			const baseRate = Number(isRound ? car.roundtripRatePerKm : car.onewayRatePerKm);
-			const dist = Number(adjustedDistance); // Calculate only threshold distance for UI display
+			const actualDistance = Number(adjustedDistance);
 
-			const displayDistance = Math.min(dist, threshold);
-			const extraKm = Math.max(0, dist - threshold);
-			const extraFee = Number((extraKm * 13).toFixed(2)); // Display fare: only up to threshold
+			// Apply minimum base km: charge for threshold even if distance is less
+			const chargeableDistance = Math.max(actualDistance, threshold);
 
-			const displayFare = Number((baseRate * displayDistance).toFixed(2));
+			// Calculate base fare (up to threshold)
+			const baseChargeDistance = Math.min(chargeableDistance, threshold);
+			const baseFare = Number((baseRate * baseChargeDistance).toFixed(2));
+
+			// Calculate extra km beyond threshold
+			const extraKm = Math.max(0, chargeableDistance - threshold);
+			const extraFee = Number((extraKm * extraRate).toFixed(2));
 
 			return {
 				...car,
 				pricePerKm: baseRate,
-				estimatedFare: displayFare, // Shows only threshold amount
-				distance: Number(dist.toFixed(2)), // Total distance
-				displayDistance: Number(displayDistance.toFixed(2)), // For reference
+				estimatedFare: baseFare,
+				distance: Number(actualDistance.toFixed(2)),
+				displayDistance: Number(baseChargeDistance.toFixed(2)),
+				chargeableDistance: Number(chargeableDistance.toFixed(2)),
 				extraKm: Number(extraKm.toFixed(2)),
-				extraFee // Hidden from UI, used in booking
+				extraFee,
+				baseFare
 			};
-		}); // Show toast when trip type changes
-
-		if (distanceKm > 0) {
-			toast.info(`Switched to ${tripType}`, {
-				description: `Prices updated for ${isRound ? adjustedDistance : distanceKm} km journey.`
-			});
-		}
+		});
 	}
 
 	function handleBookNow(car: Car) {
-		const bookingToast = toast.loading(`Booking ${car.name}...`);
+		let bookingToastId: string | number | undefined;
+
+		try {
+			bookingToastId = toast.loading(`Booking ${car.name}...`);
+		} catch (err) {
+			console.error('Booking toast error:', err);
+		}
 
 		try {
 			const raw = localStorage.getItem('tripData');
 			if (!raw) {
-				toast.dismiss(bookingToast);
-				toast.error('Trip data not found', {
+				if (bookingToastId) toast.dismiss(bookingToastId);
+				safeToast('error', 'Trip data not found', {
 					description: 'Please start from the home page.'
 				});
 				return;
@@ -236,8 +327,8 @@
 			const tripData = JSON.parse(raw);
 
 			if (tripData?.tripType && tripData.tripType !== tripType) {
-				toast.dismiss(bookingToast);
-				toast.warning('Trip type mismatch detected!', {
+				if (bookingToastId) toast.dismiss(bookingToastId);
+				safeToast('warning', 'Trip type mismatch detected!', {
 					description: `Your original selection was "${tripData.tripType}" but you're viewing "${tripType}" rates.`,
 					action: {
 						label: 'Go Back',
@@ -248,20 +339,28 @@
 				return;
 			}
 
+			const extraRate = tripData?.tripType === 'roundtrip' ? 13 : 14;
+
 			const isRound = tripType === 'roundtrip';
-			const totalDistance = Number(car.distance ?? distanceKm);
+			const actualDistance = Number(car.distance ?? distanceKm);
 			const threshold = isRound ? 250 : 130;
-			const extraKm = Number(car.extraKm ?? Math.max(0, totalDistance - threshold));
-			const extraFee = Number(car.extraFee ?? extraKm * 13);
+
+			// Apply minimum base km charge
+			const chargeableDistance = Math.max(actualDistance, threshold);
+
+			const extraKm = Number(car.extraKm ?? Math.max(0, chargeableDistance - threshold));
+			const extraFee = Number(car.extraFee ?? extraKm * extraRate);
 
 			const pricePerKm = Number(
 				car.pricePerKm ?? (isRound ? car.roundtripRatePerKm : car.onewayRatePerKm)
-			); // Base fare: only up to threshold
+			);
 
-			const baseFareUpToThreshold = pricePerKm * Math.min(totalDistance, threshold);
-			const displayedFare = Number(baseFareUpToThreshold.toFixed(2)); // Total fare: base + extra
+			// Base fare: up to threshold distance
+			const baseChargeDistance = Math.min(chargeableDistance, threshold);
+			const baseFare = Number((pricePerKm * baseChargeDistance).toFixed(2));
 
-			const totalFareWithExtra = Number((baseFareUpToThreshold + extraFee).toFixed(2));
+			// Total fare: base + extra
+			const totalFare = Number((baseFare + extraFee).toFixed(2));
 
 			const pickupDateAndTime = tripData?.pickupDateAndTime ?? null;
 			const returnDateAndTime = isRound ? (tripData?.returnDateAndTime ?? null) : null;
@@ -269,21 +368,23 @@
 			const vehicleDetails = {
 				selectedAt: Date.now(),
 				tripType,
-				totalDistance: Number(totalDistance.toFixed(2)),
+				actualDistance: Number(actualDistance.toFixed(2)),
+				chargeableDistance: Number(chargeableDistance.toFixed(2)),
 				threshold,
 				extraKm: Number(extraKm.toFixed(2)),
 				extraFee: Number(extraFee.toFixed(2)),
-				baseFare: displayedFare, // What user saw on card
-				totalFare: totalFareWithExtra, // With extra km charges
+				baseFare,
+				totalFare,
 				car: {
 					...car,
 					pricePerKm,
-					distance: Number(totalDistance.toFixed(2)),
-					estimatedFare: displayedFare, // UI display amount
+					distance: Number(actualDistance.toFixed(2)),
+					chargeableDistance: Number(chargeableDistance.toFixed(2)),
+					estimatedFare: totalFare,
 					rawFareComponents: {
-						baseFareUpToThreshold: displayedFare,
+						baseFare,
 						extraKmCharge: Number(extraFee.toFixed(2)),
-						totalWithExtra: totalFareWithExtra
+						totalFare
 					},
 					pickupDateAndTime,
 					returnDateAndTime
@@ -293,32 +394,56 @@
 			localStorage.setItem('vehicle-details', JSON.stringify(vehicleDetails));
 			selectedCarId = car.id;
 
-			toast.dismiss(bookingToast); // Show different message based on whether there are extra charges
-
-			if (extraKm > 0) {
-				toast.success(`${car.name} selected!`, {
-					description: `Base fare: ₹${displayedFare} (+₹${extraFee} for ${extraKm}km extra). Total: ₹${totalFareWithExtra}`,
-					duration: 3000
-				});
-			} else {
-				toast.success(`${car.name} selected!`, {
-					description: `Total fare: ₹${displayedFare}. Proceeding to booking...`,
-					duration: 2000
-				});
+			if (bookingToastId) {
+				try {
+					toast.dismiss(bookingToastId);
+				} catch (err) {
+					console.error('Dismiss booking toast error:', err);
+				}
 			}
+
+			// Show appropriate success message with delay
+			setTimeout(() => {
+				if (actualDistance < threshold) {
+					toast.success(`${car.name} selected!`, {
+						description: `${actualDistance}km trip charged as ${threshold}km (minimum base). Total: ₹${totalFare}`,
+						duration: 3000
+					});
+				} else if (extraKm > 0) {
+					toast.success(`${car.name} selected!`, {
+						description: `Base fare: ₹${baseFare} + ₹${extraFee} (${extraKm}km extra). Total: ₹${totalFare}`,
+						duration: 3000
+					});
+				} else {
+					toast.success(`${car.name} selected!`, {
+						description: `Total fare: ₹${totalFare}. Proceeding to booking...`,
+						duration: 2000
+					});
+				}
+			}, 100);
 
 			setTimeout(() => {
 				goto('/booking');
-			}, 500);
+			}, 600);
 		} catch (err) {
-			toast.dismiss(bookingToast);
-			toast.error('Booking failed', {
-				description: err instanceof Error ? err.message : 'An unexpected error occurred',
-				action: {
-					label: 'Retry',
-					onClick: () => handleBookNow(car)
+			if (bookingToastId) {
+				try {
+					toast.dismiss(bookingToastId);
+				} catch (e) {
+					console.error('Dismiss error:', e);
 				}
-			});
+			}
+
+			setTimeout(() => {
+				toast.error('Booking failed', {
+					description: err instanceof Error ? err.message : 'An unexpected error occurred',
+					action: {
+						label: 'Retry',
+						onClick: () => handleBookNow(car)
+					}
+				});
+			}, 100);
+
 			console.error('handleBookNow error:', err);
 		}
 	}

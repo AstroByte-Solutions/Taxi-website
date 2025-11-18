@@ -283,9 +283,9 @@
 			bind:this={badgeRef}
 			class="rounded-lg bg-[#1572D31A] px-8 py-4 text-sm font-medium text-primary"
 		>
-			POPULAR RENTAL DEALS
+			POPULAR RIDE DEALS
 		</div>
-		<h1 bind:this={headingRef} class="text-4xl font-bold">Most popular cars rental deals</h1>
+		<h1 bind:this={headingRef} class="text-4xl font-bold">Most popular cars ride deals</h1>
 	</div>
 	<div class="my-14 grid w-full grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
 		{#each cars as car, index}
