@@ -4,6 +4,7 @@
 	import Navbar from '$lib/components/navbar.svelte';
 	import Footer from '$lib/components/footer.svelte';
 	import { Toaster } from 'svelte-sonner';
+	import { Env_data } from '$lib/constant/url.constant';
 
 	let { children } = $props();
 	let isOpen = $state(false);
@@ -37,10 +38,11 @@
 			<!-- Phone Option -->
 			<!-- svelte-ignore a11y_consider_explicit_label -->
 			<a
-				href="tel:+1234567890"
+				href={"tel:"+ Env_data.COUNTRY_CODE + Env_data.WHATSAPP_NUMBER}
 				class="bg-[#1572d3] hover:bg-[#0d5cb8] text-white rounded-full p-4 shadow-lg transition-all duration-300 hover:scale-110 flex items-center justify-center"
 				onclick={closeMenu}
 			>
+
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-5 w-5"
@@ -60,7 +62,7 @@
 			<!-- WhatsApp Option -->
 			<!-- svelte-ignore a11y_consider_explicit_label -->
 			<a
-				href="https://wa.me/1234567890"
+				href={Env_data.WHATSAPP_CONTACT_LINK}
 				target="_blank"
 				rel="noopener noreferrer"
 				class="bg-[#25D366] hover:bg-[#1ea952] text-white rounded-full p-4 shadow-lg transition-all duration-300 hover:scale-110 flex items-center justify-center"
