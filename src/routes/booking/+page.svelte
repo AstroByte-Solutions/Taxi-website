@@ -29,8 +29,13 @@
 		baseFare: { km: 0, amount: 0 },
 		additionalFare: { km: 0, amount: 0 },
 		driverBata: { km: 0, amount: 0 },
-		total: 0
+		total: 0,
+		totalDistance: 0
 	};
+
+	function getExtraKmRate(type: string) {
+		return type === 'roundtrip' ? 13 : 14;
+	}
 
 	onMount(() => {
 		try {
@@ -64,23 +69,22 @@
 			formData.pickupAddress =
 				trip?.pickup?.display_name ?? trip?.pickup?.text ?? formData.pickupAddress;
 
-			// ✅ CORRECTED: Use the values from vehicle-details properly
-			const totalDistance = Number(vehicle?.totalDistance ?? 0);
+			// Read from the correct property names
+			const actualDistance = Number(vehicle?.actualDistance ?? 0);
+			const chargeableDistance = Number(vehicle?.chargeableDistance ?? actualDistance);
 			const threshold = Number(vehicle?.threshold ?? (trip?.tripType === 'roundtrip' ? 250 : 130));
-			const extraKmRate = Number(
-				vehicle?.extraKmRate ?? (trip?.tripType === 'roundtrip' ? 13 : 14)
-			);
-			const baseFareAmount = Number(vehicle?.baseFare ?? 0); // UI displayed amount (up to threshold)
+			const baseFareAmount = Number(vehicle?.baseFare ?? 0);
 			const extraKm = Number(vehicle?.extraKm ?? 0);
 			const extraFee = Number(vehicle?.extraFee ?? 0);
 			const driverBataAmount = 400;
 
-			// Total = base fare (threshold) + extra km charges + driver bata
+			// Total = base fare + extra km charges + driver bata
 			const totalAmount = Math.round((baseFareAmount + extraFee + driverBataAmount) * 100) / 100;
 
+			// Show the chargeable distance in UI (minimum base km or actual if higher)
 			paymentDetails = {
 				baseFare: {
-					km: Math.min(totalDistance, threshold), // Show threshold km in UI
+					km: chargeableDistance <= threshold ? chargeableDistance : threshold,
 					amount: baseFareAmount
 				},
 				additionalFare: {
@@ -91,7 +95,8 @@
 					km: 0,
 					amount: driverBataAmount
 				},
-				total: totalAmount
+				total: totalAmount,
+				totalDistance: vehicle?.car?.distance
 			};
 		} catch (err) {
 			console.error('Error loading booking details from localStorage:', err);
@@ -143,7 +148,7 @@ Return Date: ${trip.returnDateAndTime || '—'}`;
 			const extraKmRate = Number(
 				vehicle?.extraKmRate || (trip?.tripType === 'roundtrip' ? 13 : 14)
 			);
-			const totalDistance = Number(vehicle?.totalDistance || 0);
+			const totalDistance = Number(vehicle?.car?.distance || 0);
 			const threshold = Number(vehicle?.threshold || (trip?.tripType === 'roundtrip' ? 250 : 130));
 
 			const message = `
@@ -163,10 +168,11 @@ ${pickupDateTimeLine}
 *Base Fare (${Math.min(totalDistance, threshold)} km):* Rs.${booking.baseFare.toFixed(2)}
 ${extraKm > 0 ? `*Extra Km (${extraKm} km @ Rs.${extraKmRate}/km):* Rs.${extraFee.toFixed(2)}` : ''}
 *Driver Bata:* Rs.${driverBata}
+
+*Total Distance:* ${totalDistance} km
 ------------------------------------
 *TOTAL AMOUNT:* Rs.${paymentDetails.total.toFixed(2)}
 ------------------------------------
-*Total Distance:* ${totalDistance} km
 
 ------------------------------------
 *BOOKER DETAILS*
@@ -298,7 +304,9 @@ Thank you for booking with us!`;
 					<!-- Only show message if extra fare applies -->
 					{#if paymentDetails.additionalFare.km > 0}
 						<p class="mt-1 text-xs text-gray-500 italic">
-							Extra {tripType === 'roundtrip' ? 'round trip' : 'one way'} distance — ₹13/km applied for
+							Extra {tripType === 'roundtrip' ? 'round trip' : 'one way'} distance — ₹{getExtraKmRate(
+								tripType
+							)}/km applied for
 							{paymentDetails.additionalFare.km} km.
 						</p>
 					{/if}
@@ -307,7 +315,7 @@ Thank you for booking with us!`;
 				<div class="flex items-center justify-between border-t border-gray-100 pt-3">
 					<div>
 						<span class="text-sm font-medium text-gray-700">Driver Bata</span>
-						<span class="ml-1 text-xs text-gray-500">[upto {paymentDetails.driverBata.km} Km]</span>
+						<!-- <span class="ml-1 text-xs text-gray-500">[upto {paymentDetails.driverBata.km} Km]</span> -->
 					</div>
 					<span class="text-sm font-semibold text-gray-900"
 						>₹ {paymentDetails.driverBata.amount.toFixed(2)}</span
@@ -316,10 +324,18 @@ Thank you for booking with us!`;
 
 				<div class="flex items-center justify-between border-t border-gray-100 pt-3">
 					<div>
-						<span class="text-sm font-medium text-gray-700">Toll Fee</span>
-						<span class="ml-1 text-xs text-gray-500">[upto your drop location in-between Km]</span>
+						<span class="text-sm font-medium text-gray-700">Additional Charges</span>
+						<span class="ml-1 text-xs text-gray-500">[Toll, Parking, Permit - As applicable]</span>
 					</div>
 					<span class="text-sm font-semibold text-gray-900">Extra fee</span>
+				</div>
+
+				<!-- Total Distance -->
+				<div class="flex items-center justify-between border-t border-gray-100 pt-3">
+					<div>
+						<span class="text-sm font-medium text-gray-700">Total Distance</span>
+					</div>
+					<span class="text-sm font-semibold text-gray-900">{paymentDetails.totalDistance} km</span>
 				</div>
 
 				<!-- Total Amount -->
@@ -336,7 +352,7 @@ Thank you for booking with us!`;
 				<p class="text-sm text-gray-700">
 					<span class="font-semibold">Note:</span> The actual bill amount might differ based on actual
 					KMs travel, Waiting time (for Oneway only), Hill-station charges, Inter-state Permits,Toll
-					Charges etc.
+					Charges, parking etc.
 				</p>
 			</div>
 		</div>

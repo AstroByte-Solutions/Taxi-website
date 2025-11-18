@@ -160,15 +160,45 @@
 			}
 
 			// Animate marquee
-			gsap.to(marqueeRef.children, {
-				x: '-100%',
-				duration: 20,
-				repeat: -1,
-				ease: 'none',
-				modifiers: {
-					x: gsap.utils.unitize((x) => parseFloat(x) % (marqueeRef.scrollWidth / 2))
-				}
-			});
+			if (marqueeRef) {
+				// ensure DOM painted
+				requestAnimationFrame(() => {
+					const marqueeContent = marqueeRef.querySelector('.marquee-content') as HTMLElement | null;
+					if (!marqueeContent) {
+						console.warn('marquee: no .marquee-content found — skipping marquee animation');
+						return;
+					}
+
+					// clone for loop only if needed
+					const clone = marqueeContent.cloneNode(true) as HTMLElement;
+					marqueeRef.appendChild(clone);
+
+					// measure once DOM has been updated
+					// use offsetWidth/scrollWidth depending on the desired measurement
+					const width =
+						marqueeRef.scrollWidth || marqueeContent.offsetWidth || marqueeContent.clientWidth;
+					if (!width || width === 0) {
+						console.warn('marquee: width is 0 — skipping marquee animation');
+						return;
+					}
+
+					gsap.to(Array.from(marqueeRef.children), {
+						x: '-100%',
+						duration: 20,
+						repeat: -1,
+						ease: 'none',
+						modifiers: {
+							x: gsap.utils.unitize((x: string) => {
+								// parseFloat(x) might be NaN if x is not numeric; guard it
+								const num = parseFloat(x) || 0;
+								return (num % (width / 2)).toString();
+							})
+						}
+					});
+
+					// rest of logo animation...
+				});
+			}
 
 			// Logo entrance animation
 			gsap.from(logos, {
