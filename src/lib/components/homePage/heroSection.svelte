@@ -5,7 +5,6 @@
 	let { children } = $props();
 
 	let heading1: HTMLHeadingElement;
-	let heading2: HTMLHeadingElement;
 	let description: HTMLDivElement;
 	let carImage: HTMLDivElement;
 	let formContainer: HTMLDivElement;
@@ -14,12 +13,11 @@
 		// Create timeline for coordinated animations
 		const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
 
-		// Animate headings with stagger
-		tl.from([heading1, heading2], {
+		// Animate heading
+		tl.from(heading1, {
 			y: 50,
 			opacity: 0,
-			duration: 1,
-			stagger: 0.2
+			duration: 1
 		})
 			// Animate description
 			.from(
@@ -86,7 +84,8 @@
 </script>
 
 <section
-	class="relative overflow-hidden bg-[url('https://image-hosting-server-production-da8d.up.railway.app/api/files/r682kajzrtrg4zc/hywt5jppfcc1bm3/header_1_2tOQy09VKG.png')] bg-cover bg-center sm:opacity-0 md:opacity-100"
+	class="relative bg-[url('https://image-hosting-server-production-da8d.up.railway.app/api/files/r682kajzrtrg4zc/hywt5jppfcc1bm3/header_1_2tOQy09VKG.png')] bg-cover bg-center sm:opacity-0 md:opacity-100"
+	style="overflow-x: clip;"
 >
 	<div
 		class="mx-auto flex max-w-[1340px] flex-col justify-between px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-40"
@@ -97,14 +96,11 @@
 					bind:this={heading1}
 					class="text-3xl leading-tight font-semibold sm:text-4xl md:text-5xl lg:text-6xl"
 				>
-					Book a Taxi!!
-				</h1>
-				<h1
-					bind:this={heading2}
-					class="text-3xl leading-tight font-semibold sm:text-4xl md:text-5xl lg:text-6xl"
-				>
-					One <span class="inline-block text-primary">way</span> One
-					<span class="inline-block text-primary">pay</span>
+					<span class="block">Book a Taxi!!</span>
+					<span class="block"
+						>One <span class="inline-block text-primary">way</span> One
+						<span class="inline-block text-primary">pay</span></span
+					>
 				</h1>
 			</div>
 			<div bind:this={description} class="max-w-sm">

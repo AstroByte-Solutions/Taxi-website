@@ -86,6 +86,7 @@
 		</svg>
 	</div>
 	<div class="min-w-0 flex-1">
+		<!-- svelte-ignore a11y_label_has_associated_control -->
 		<label class="mb-1 block text-xs font-semibold text-gray-900 sm:text-sm">{label}</label>
 		<input
 			type="text"
@@ -98,7 +99,7 @@
 
 		{#if dropdownOpen && (loading || error || results.length > 0)}
 			<div
-				class="absolute top-full right-0 left-0 z-50 mt-2 max-h-60 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+				class="absolute top-full right-0 left-0 z-[9999] mt-2 max-h-60 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-2xl"
 			>
 				{#if loading}
 					<div class="p-3 text-xs text-gray-500 sm:text-sm">

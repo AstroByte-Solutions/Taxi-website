@@ -7,6 +7,7 @@
 	import { vehicleStore } from '$lib/stores/vehicleStore';
 	import { formatBookingMessage } from '$lib/utils/whatsapp.utils';
 	import { getExtraKmRate } from '$lib/data/pricing.config';
+	import { verifyBooking, PriceMismatchError } from '$lib/api/booking.api';
 	import type { BookerInfo, TripType } from '$lib/types/trip.types';
 
 	let formData: BookerInfo = {
@@ -178,7 +179,7 @@
 		}
 	});
 
-	function sendWhatsAppMessage(event: Event) {
+	async function sendWhatsAppMessage(event: Event) {
 		event.preventDefault();
 
 		// Final validation check
@@ -203,6 +204,60 @@
 				return;
 			}
 
+			// 🔒 SECURITY: Verify booking on server before proceeding
+			toast.loading('Verifying booking details...');
+
+			try {
+				const verifiedBooking = await verifyBooking(
+					vehicle.car.id,
+					vehicle.actualDistance,
+					tripType,
+					paymentDetails.total // Send client-calculated price for verification
+				);
+
+				// Update payment details with server-verified price
+				const verifiedTotal = verifiedBooking.totalFare;
+
+				// Check if price differs from what user saw
+				if (Math.abs(verifiedTotal - paymentDetails.total) > 1) {
+					toast.dismiss();
+					toast.warning('Price Updated', {
+						description: `Server verified price: ₹${verifiedTotal.toFixed(2)}. Please review before continuing.`,
+						duration: 5000
+					});
+
+					// Update displayed price
+					paymentDetails.total = verifiedTotal;
+					paymentDetails.baseFare.amount = verifiedBooking.baseFare;
+					paymentDetails.additionalFare.amount = verifiedBooking.extraFee;
+					paymentDetails.driverBata.amount = verifiedBooking.driverBata;
+
+					return; // Stop and let user review
+				}
+
+				toast.dismiss();
+				toast.success('Booking verified! Preparing WhatsApp message...');
+			} catch (error) {
+				toast.dismiss();
+
+				if (error instanceof PriceMismatchError) {
+					toast.error('Price Mismatch Detected!', {
+						description: `Server price: ₹${error.serverPrice}, Your price: ₹${error.clientPrice}. Difference: ₹${error.difference}`,
+						duration: 6000
+					});
+
+					// Update to server price
+					paymentDetails.total = error.serverPrice;
+					return;
+				}
+
+				toast.error('Booking verification failed', {
+					description: error instanceof Error ? error.message : 'Please try again'
+				});
+				return;
+			}
+
+			// Proceed with WhatsApp message
 			const message = formatBookingMessage(trip, vehicle, formData);
 			const encodedMessage = encodeURIComponent(message);
 			const whatsAppUrl = `${Env_data.WHATSAPP_LINK}=${encodedMessage}`;
