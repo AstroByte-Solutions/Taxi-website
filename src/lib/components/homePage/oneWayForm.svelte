@@ -2,7 +2,13 @@
 	import LocationSearchInput from './locationSearchInput.svelte';
 	import type { GeocodeResult } from '$lib/geocode/geocode';
 	import { goto } from '$app/navigation';
+	import { tripStore } from '$lib/stores/tripStore';
+	import { validateTripData } from '$lib/utils/validation.utils';
+	import { validateLocations } from '$lib/utils/location.utils';
+	import { toast } from 'svelte-sonner';
+	import { formDataStore } from '$lib/stores/formDataStore';
 
+	// Initialize from shared form data
 	let pickupQuery = $state('');
 	let dropoffQuery = $state('');
 	let selectedPickup: GeocodeResult | null = $state(null);
@@ -10,34 +16,42 @@
 	let pickupTime = $state('');
 	let submitError: string | null = $state(null);
 
-	function validate(): { ok: boolean; message?: string } {
-		if (!selectedPickup) {
-			return { ok: false, message: 'Please select a pickup location.' };
-		}
-		if (!selectedDropoff) {
-			return { ok: false, message: 'Please select a dropoff location.' };
-		}
-		if (!pickupTime) {
-			return { ok: false, message: 'Please select pickup date & time.' };
-		}
-		const t = new Date(pickupTime).getTime();
-		if (isNaN(t)) {
-			return { ok: false, message: 'Invalid pickup date/time.' };
-		}
-		return { ok: true };
-	}
+	// Load data from store on mount/tab switch
+	$effect(() => {
+		const data = $formDataStore;
+		pickupQuery = data.pickupQuery;
+		dropoffQuery = data.dropoffQuery;
+		selectedPickup = data.selectedPickup;
+		selectedDropoff = data.selectedDropoff;
+		pickupTime = data.pickupTime;
+	});
+
+	// Update store when values change
+	$effect(() => {
+		formDataStore.update((data) => ({
+			...data,
+			pickupQuery,
+			dropoffQuery,
+			selectedPickup,
+			selectedDropoff,
+			pickupTime
+		}));
+	});
 
 	function handleSubmit() {
-		const v = validate();
-		if (!v.ok) {
-			submitError = v.message || 'Please fill required fields';
+		// Validate locations are within allowed states
+		const locationValidation = validateLocations(selectedPickup, selectedDropoff);
+		if (!locationValidation.ok) {
+			toast.error('Sorry, we cannot serve this location', {
+				description:
+					'Our taxi service is currently available only in Tamil Nadu, Kerala, Karnataka and Pondicherry.',
+				duration: 6000
+			});
 			return;
 		}
 
-		submitError = null;
-
 		const tripData = {
-			tripType: 'oneway',
+			tripType: 'oneway' as const,
 			pickup: {
 				display_name: selectedPickup!.display_name,
 				lat: selectedPickup!.lat,
@@ -52,8 +66,16 @@
 			createdAt: Date.now()
 		};
 
+		const validation = validateTripData(tripData);
+		if (!validation.ok) {
+			submitError = validation.message || 'Please fill required fields';
+			return;
+		}
+
+		submitError = null;
+
 		try {
-			localStorage.setItem('tripData', JSON.stringify(tripData));
+			tripStore.set(tripData);
 			goto('/choose-vehicle');
 		} catch (e) {
 			submitError = 'Failed to save trip data. Please try again.';
