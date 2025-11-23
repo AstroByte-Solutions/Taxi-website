@@ -6,7 +6,7 @@
 	import Facebook from '$lib/icons/facebook.svelte';
 </script>
 
-<footer class="mt-20 bg-[#051C34] py-10 text-white">
+<footer class="mt-2 bg-[#051C34] py-10 text-white">
 	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 		<!-- Main Footer Content -->
 		<div class="mb-8 grid grid-cols-1 gap-8 md:grid-cols-2">

@@ -2,7 +2,13 @@
 	import LocationSearchInput from './locationSearchInput.svelte';
 	import type { GeocodeResult } from '$lib/geocode/geocode';
 	import { goto } from '$app/navigation';
+	import { tripStore } from '$lib/stores/tripStore';
+	import { validateTripData } from '$lib/utils/validation.utils';
+	import { validateLocations } from '$lib/utils/location.utils';
+	import { toast } from 'svelte-sonner';
+	import { formDataStore } from '$lib/stores/formDataStore';
 
+	// Initialize from shared form data
 	let pickupQuery = $state('');
 	let dropoffQuery = $state('');
 	let selectedPickup: GeocodeResult | null = $state(null);
@@ -11,41 +17,44 @@
 	let returnTime = $state('');
 	let submitError: string | null = $state(null);
 
-	function validate(): { ok: boolean; message?: string } {
-		if (!selectedPickup) {
-			return { ok: false, message: 'Please select a pickup location.' };
-		}
-		if (!selectedDropoff) {
-			return { ok: false, message: 'Please select a dropoff location.' };
-		}
-		if (!pickupTime) {
-			return { ok: false, message: 'Please select pickup date & time.' };
-		}
-		if (!returnTime) {
-			return { ok: false, message: 'Please select return date & time.' };
-		}
-		const t1 = new Date(pickupTime).getTime();
-		const t2 = new Date(returnTime).getTime();
-		if (isNaN(t1) || isNaN(t2)) {
-			return { ok: false, message: 'Invalid date/time.' };
-		}
-		if (t2 <= t1) {
-			return { ok: false, message: 'Return time must be after pickup time.' };
-		}
-		return { ok: true };
-	}
+	// Load data from store on mount/tab switch
+	$effect(() => {
+		const data = $formDataStore;
+		pickupQuery = data.pickupQuery;
+		dropoffQuery = data.dropoffQuery;
+		selectedPickup = data.selectedPickup;
+		selectedDropoff = data.selectedDropoff;
+		pickupTime = data.pickupTime;
+		returnTime = data.returnTime;
+	});
+
+	// Update store when values change
+	$effect(() => {
+		formDataStore.update((data) => ({
+			...data,
+			pickupQuery,
+			dropoffQuery,
+			selectedPickup,
+			selectedDropoff,
+			pickupTime,
+			returnTime
+		}));
+	});
 
 	function handleSubmit() {
-		const v = validate();
-		if (!v.ok) {
-			submitError = v.message || 'Please fill required fields';
+		// Validate locations are within allowed states
+		const locationValidation = validateLocations(selectedPickup, selectedDropoff);
+		if (!locationValidation.ok) {
+			toast.error('Sorry, we cannot serve this location', {
+				description:
+					'Our taxi service is currently available only in Tamil Nadu, Kerala, Karnataka and Pondicherry.',
+				duration: 6000
+			});
 			return;
 		}
 
-		submitError = null;
-
 		const tripData = {
-			tripType: 'roundtrip',
+			tripType: 'roundtrip' as const,
 			pickup: {
 				display_name: selectedPickup!.display_name,
 				lat: selectedPickup!.lat,
@@ -61,8 +70,16 @@
 			createdAt: Date.now()
 		};
 
+		const validation = validateTripData(tripData);
+		if (!validation.ok) {
+			submitError = validation.message || 'Please fill required fields';
+			return;
+		}
+
+		submitError = null;
+
 		try {
-			localStorage.setItem('tripData', JSON.stringify(tripData));
+			tripStore.set(tripData);
 			goto('/choose-vehicle');
 		} catch (e) {
 			submitError = 'Failed to save trip data. Please try again.';
@@ -104,6 +121,7 @@
 			</svg>
 		</div>
 		<div class="min-w-0 flex-1">
+			<!-- svelte-ignore a11y_label_has_associated_control -->
 			<label class="mb-1 block text-xs font-semibold text-gray-900 sm:text-sm">Pick up time</label>
 			<input
 				type="datetime-local"
@@ -132,6 +150,7 @@
 			</svg>
 		</div>
 		<div class="min-w-0 flex-1">
+			<!-- svelte-ignore a11y_label_has_associated_control -->
 			<label class="mb-1 block text-xs font-semibold text-gray-900 sm:text-sm">Return time</label>
 			<input
 				type="datetime-local"
@@ -148,7 +167,7 @@
 				<div class="mb-2 text-sm text-red-600">{submitError}</div>
 			{/if}
 			<button
-				on:click={handleSubmit}
+				onclick={handleSubmit}
 				disabled={!isValid}
 				class="w-full rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 sm:px-8 sm:py-3 sm:text-base"
 			>

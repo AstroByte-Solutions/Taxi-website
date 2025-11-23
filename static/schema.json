@@ -1,0 +1,65 @@
+{
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    "name": "Hello Drop Taxi",
+    "image": "https://hellodroptaxi.in/logo.png",
+    "@id": "https://hellodroptaxi.in",
+    "url": "https://hellodroptaxi.in",
+    "telephone": "+91-9361417837",
+    "priceRange": "₹₹",
+    "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "",
+        "addressLocality": "Trichy",
+        "addressRegion": "Tamil Nadu",
+        "postalCode": "",
+        "addressCountry": "IN"
+    },
+    "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": 10.7905,
+        "longitude": 78.7047
+    },
+    "openingHoursSpecification": {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+        ],
+        "opens": "00:00",
+        "closes": "23:59"
+    },
+    "sameAs": [
+        "https://www.facebook.com/hellodrop",
+        "https://www.instagram.com/hellodrop"
+    ],
+    "areaServed": [
+        {
+            "@type": "State",
+            "name": "Tamil Nadu"
+        },
+        {
+            "@type": "State",
+            "name": "Kerala"
+        },
+        {
+            "@type": "State",
+            "name": "Karnataka"
+        },
+        {
+            "@type": "State",
+            "name": "Pondicherry"
+        }
+    ],
+    "description": "Professional taxi service operating 24/7 across Tamil Nadu, Kerala, Karnataka, and Pondicherry. Offering one-way and round-trip services with transparent pricing and professional drivers.",
+    "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.5",
+        "reviewCount": "10000"
+    }
+}

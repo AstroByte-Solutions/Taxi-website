@@ -31,18 +31,17 @@
 <Toaster position="top-right" richColors />
 <Navbar />
 
-<div class="fixed bottom-6 right-6 z-50">
+<div class="fixed right-6 bottom-6 z-50">
 	<!-- Options Menu -->
 	{#if isOpen}
-		<div class="absolute bottom-20 right-0 mb-2 flex flex-col gap-3 animate-fade-in">
+		<div class="animate-fade-in absolute right-0 bottom-20 mb-2 flex flex-col gap-3">
 			<!-- Phone Option -->
 			<!-- svelte-ignore a11y_consider_explicit_label -->
 			<a
-				href={"tel:"+ Env_data.COUNTRY_CODE + Env_data.WHATSAPP_NUMBER}
-				class="bg-[#1572d3] hover:bg-[#0d5cb8] text-white rounded-full p-4 shadow-lg transition-all duration-300 hover:scale-110 flex items-center justify-center"
+				href={'tel:' + Env_data.COUNTRY_CODE + Env_data.WHATSAPP_NUMBER}
+				class="flex items-center justify-center rounded-full bg-[#1572d3] p-4 text-white shadow-lg transition-all duration-300 hover:scale-110 hover:bg-[#0d5cb8]"
 				onclick={closeMenu}
 			>
-
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-5 w-5"
@@ -58,14 +57,14 @@
 					/>
 				</svg>
 			</a>
-			
+
 			<!-- WhatsApp Option -->
 			<!-- svelte-ignore a11y_consider_explicit_label -->
 			<a
 				href={Env_data.WHATSAPP_CONTACT_LINK}
 				target="_blank"
 				rel="noopener noreferrer"
-				class="bg-[#25D366] hover:bg-[#1ea952] text-white rounded-full p-4 shadow-lg transition-all duration-300 hover:scale-110 flex items-center justify-center"
+				class="flex items-center justify-center rounded-full bg-[#25D366] p-4 text-white shadow-lg transition-all duration-300 hover:scale-110 hover:bg-[#1ea952]"
 				onclick={closeMenu}
 			>
 				<svg
@@ -81,11 +80,11 @@
 			</a>
 		</div>
 	{/if}
-	
+
 	<!-- Main Button -->
 	<button
 		onclick={toggleMenu}
-		class="bg-[#1572d3] hover:bg-[#0d5cb8] text-white rounded-full p-4 shadow-lg transition-all duration-300 hover:scale-110 flex items-center justify-center"
+		class="flex items-center justify-center rounded-full bg-[#1572d3] p-4 text-white shadow-lg transition-all duration-300 hover:scale-110 hover:bg-[#0d5cb8]"
 	>
 		{#if isOpen}
 			<svg
@@ -121,7 +120,6 @@
 	</button>
 </div>
 <main class="w-full">
-
 	{@render children?.()}
 </main>
 
@@ -148,7 +146,7 @@
 			transform: translateY(0);
 		}
 	}
-	
+
 	.animate-fade-in {
 		animation: fade-in 0.3s ease-out;
 	}
