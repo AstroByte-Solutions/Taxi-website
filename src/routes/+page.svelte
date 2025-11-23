@@ -5,10 +5,14 @@
 	import HeroSection from '$lib/components/homePage/heroSection.svelte';
 	import BookingForm from '$lib/components/homePage/bookingForm.svelte';
 	import { onMount } from 'svelte';
+	import { tripStore } from '$lib/stores/tripStore';
+	import { vehicleStore } from '$lib/stores/vehicleStore';
+	import { resetFormData } from '$lib/stores/formDataStore';
 
 	onMount(() => {
-		localStorage.removeItem('tripData');
-		localStorage.removeItem('vehicle-details');
+		tripStore.reset();
+		vehicleStore.reset();
+		resetFormData();
 	});
 </script>
 

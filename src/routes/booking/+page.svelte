@@ -3,8 +3,13 @@
 	import { Env_data } from '$lib/constant/url.constant';
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { tripStore } from '$lib/stores/tripStore';
+	import { vehicleStore } from '$lib/stores/vehicleStore';
+	import { formatBookingMessage } from '$lib/utils/whatsapp.utils';
+	import { getExtraKmRate } from '$lib/data/pricing.config';
+	import type { BookerInfo, TripType } from '$lib/types/trip.types';
 
-	let formData = {
+	let formData: BookerInfo = {
 		name: '',
 		contact: '',
 		contact2: '',
@@ -12,7 +17,7 @@
 		pickupAddress: ''
 	};
 
-	let tripType = '';
+	let tripType: TripType = 'oneway';
 
 	let bookingDetails = {
 		bookType: '',
@@ -33,169 +38,183 @@
 		totalDistance: 0
 	};
 
-	function getExtraKmRate(type: string) {
-		return type === 'roundtrip' ? 13 : 14;
+	// Validation functions
+	function isValidEmail(email: string): boolean {
+		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+		return emailRegex.test(email);
+	}
+
+	function isValidPhone(phone: string): boolean {
+		// Indian phone number: 10 digits
+		const phoneRegex = /^[6-9]\d{9}$/;
+		return phoneRegex.test(phone.replace(/\s+/g, ''));
+	}
+
+	function isValidName(name: string): boolean {
+		return name.trim().length >= 2;
+	}
+
+	function isValidAddress(address: string): boolean {
+		return address.trim().length >= 10;
+	}
+
+	// Reactive validation state
+	$: isNameValid = isValidName(formData.name);
+	$: isEmailValid = isValidEmail(formData.email);
+	$: isContactValid = isValidPhone(formData.contact);
+	$: isContact2Valid = !formData.contact2 || isValidPhone(formData.contact2);
+	$: isAddressValid = isValidAddress(formData.pickupAddress);
+
+	// Overall form validity
+	$: isFormValid =
+		isNameValid && isEmailValid && isContactValid && isContact2Valid && isAddressValid;
+
+	// Error messages
+	let errors = {
+		name: '',
+		email: '',
+		contact: '',
+		contact2: '',
+		pickupAddress: ''
+	};
+
+	function validateField(field: keyof BookerInfo) {
+		switch (field) {
+			case 'name':
+				if (!formData.name) {
+					errors.name = '';
+				} else if (!isNameValid) {
+					errors.name = 'Name must be at least 2 characters';
+				} else {
+					errors.name = '';
+				}
+				break;
+			case 'email':
+				if (!formData.email) {
+					errors.email = '';
+				} else if (!isEmailValid) {
+					errors.email = 'Please enter a valid email address';
+				} else {
+					errors.email = '';
+				}
+				break;
+			case 'contact':
+				if (!formData.contact) {
+					errors.contact = '';
+				} else if (!isContactValid) {
+					errors.contact = 'Please enter a valid 10-digit phone number';
+				} else {
+					errors.contact = '';
+				}
+				break;
+			case 'contact2':
+				if (formData.contact2 && !isContact2Valid) {
+					errors.contact2 = 'Please enter a valid 10-digit phone number';
+				} else {
+					errors.contact2 = '';
+				}
+				break;
+			case 'pickupAddress':
+				if (!formData.pickupAddress) {
+					errors.pickupAddress = '';
+				} else if (!isAddressValid) {
+					errors.pickupAddress = 'Address must be at least 10 characters';
+				} else {
+					errors.pickupAddress = '';
+				}
+				break;
+		}
 	}
 
 	onMount(() => {
 		try {
-			// Load tripData and vehicle-details safely
-			const trip = JSON.parse(localStorage.getItem('tripData') || 'null');
-			const vehicle = JSON.parse(localStorage.getItem('vehicle-details') || 'null');
+			const trip = $tripStore;
+			const vehicle = $vehicleStore;
 
 			if (!trip || !vehicle) {
-				console.warn('Missing tripData or vehicle-details in localStorage.');
+				console.warn('Missing tripData or vehicle-details.');
 				return;
 			}
 
-			// Fill booking details safely
-			tripType = trip?.tripType || '';
-			bookingDetails.bookType = trip?.tripType === 'roundtrip' ? 'Round Trip' : 'One Way';
-			bookingDetails.carType = vehicle?.car?.name ?? bookingDetails.carType;
-			bookingDetails.carDescription = vehicle?.car?.description ?? bookingDetails.carDescription;
-			bookingDetails.pickup =
-				trip?.pickup?.display_name ?? trip?.pickup?.text ?? bookingDetails.pickup;
-			bookingDetails.drop =
-				trip?.dropoff?.display_name ?? trip?.dropoff?.text ?? bookingDetails.drop;
+			// Fill booking details
+			tripType = trip.tripType;
+			bookingDetails.bookType = trip.tripType === 'roundtrip' ? 'Round Trip' : 'One Way';
+			bookingDetails.carType = vehicle.car.name ?? bookingDetails.carType;
+			bookingDetails.carDescription = vehicle.car.description ?? bookingDetails.carDescription;
+			bookingDetails.pickup = trip.pickup.display_name ?? bookingDetails.pickup;
+			bookingDetails.drop = trip.dropoff.display_name ?? bookingDetails.drop;
 			bookingDetails.bookedAt = new Date().toLocaleString();
+			bookingDetails.pickupDateAndTime = trip.pickupDateAndTime ?? '';
+			bookingDetails.returnDateAndTime = trip.returnDateAndTime ?? '';
 
-			// Add pickup/return times
-			bookingDetails = {
-				...bookingDetails,
-				pickupDateAndTime: trip?.pickupDateAndTime ?? '',
-				returnDateAndTime: trip?.returnDateAndTime ?? ''
-			};
+			formData.pickupAddress = trip.pickup.display_name ?? formData.pickupAddress;
 
-			formData.pickupAddress =
-				trip?.pickup?.display_name ?? trip?.pickup?.text ?? formData.pickupAddress;
-
-			// Read from the correct property names
-			const actualDistance = Number(vehicle?.actualDistance ?? 0);
-			const chargeableDistance = Number(vehicle?.chargeableDistance ?? actualDistance);
-			const threshold = Number(vehicle?.threshold ?? (trip?.tripType === 'roundtrip' ? 250 : 130));
-			const baseFareAmount = Number(vehicle?.baseFare ?? 0);
-			const extraKm = Number(vehicle?.extraKm ?? 0);
-			const extraFee = Number(vehicle?.extraFee ?? 0);
+			// Payment details
 			const driverBataAmount = 400;
+			const totalAmount =
+				Math.round((vehicle.baseFare + vehicle.extraFee + driverBataAmount) * 100) / 100;
 
-			// Total = base fare + extra km charges + driver bata
-			const totalAmount = Math.round((baseFareAmount + extraFee + driverBataAmount) * 100) / 100;
-
-			// Show the chargeable distance in UI (minimum base km or actual if higher)
 			paymentDetails = {
 				baseFare: {
-					km: chargeableDistance <= threshold ? chargeableDistance : threshold,
-					amount: baseFareAmount
+					km:
+						vehicle.chargeableDistance <= vehicle.threshold
+							? vehicle.chargeableDistance
+							: vehicle.threshold,
+					amount: vehicle.baseFare
 				},
 				additionalFare: {
-					km: extraKm,
-					amount: extraFee
+					km: vehicle.extraKm,
+					amount: vehicle.extraFee
 				},
 				driverBata: {
 					km: 0,
 					amount: driverBataAmount
 				},
 				total: totalAmount,
-				totalDistance: vehicle?.car?.distance
+				totalDistance: vehicle.car.distance ?? vehicle.actualDistance
 			};
 		} catch (err) {
-			console.error('Error loading booking details from localStorage:', err);
+			console.error('Error loading booking details:', err);
 		}
 	});
 
-	function sendWhatsAppMessage() {
-		try {
-			const tripRaw = localStorage.getItem('tripData');
-			const vehicleRaw = localStorage.getItem('vehicle-details');
+	function sendWhatsAppMessage(event: Event) {
+		event.preventDefault();
 
-			if (!tripRaw || !vehicleRaw) {
+		// Final validation check
+		if (!isFormValid) {
+			toast.error('Please fill all required fields correctly');
+			return;
+		}
+
+		try {
+			const trip = $tripStore;
+			const vehicle = $vehicleStore;
+
+			if (!trip || !vehicle) {
 				toast.warning(
 					'Missing trip or vehicle details. Please complete your booking before sharing.'
 				);
 				return;
 			}
 
-			const trip = JSON.parse(tripRaw);
-			const vehicle = JSON.parse(vehicleRaw);
-
-			if (!trip?.pickup || !trip?.dropoff || !vehicle?.car) {
+			if (!trip.pickup || !trip.dropoff || !vehicle.car) {
 				toast.warning('Incomplete booking details. Please check your trip and vehicle selection.');
 				return;
 			}
 
-			const booking = {
-				bookType: trip?.tripType === 'roundtrip' ? 'Round Trip' : 'One Way',
-				pickup: trip?.pickup?.display_name || trip?.pickup?.text || 'Unknown',
-				drop: trip?.dropoff?.display_name || trip?.dropoff?.text || 'Unknown',
-				carType: vehicle?.car?.name || 'Unknown',
-				carCategory: vehicle?.car?.category || '—',
-				baseFare: vehicle?.baseFare || vehicle?.car?.estimatedFare || 0,
-				bookedAt: new Date().toLocaleString()
-			};
-
-			let pickupDateTimeLine = '';
-
-			if (trip.tripType === 'oneway') {
-				pickupDateTimeLine = `Pickup Date: ${trip.pickupDateAndTime || '—'}`;
-			} else if (trip.tripType === 'roundtrip') {
-				pickupDateTimeLine = `Pickup Date: ${trip.pickupDateAndTime || '—'}
-Return Date: ${trip.returnDateAndTime || '—'}`;
-			}
-
-			const driverBata = 400;
-			const extraKm = Number(vehicle?.extraKm || 0);
-			const extraFee = Number(vehicle?.extraFee || 0);
-			const extraKmRate = Number(
-				vehicle?.extraKmRate || (trip?.tripType === 'roundtrip' ? 13 : 14)
-			);
-			const totalDistance = Number(vehicle?.car?.distance || 0);
-			const threshold = Number(vehicle?.threshold || (trip?.tripType === 'roundtrip' ? 250 : 130));
-
-			const message = `
-*Taxi Booking Details*
-------------------------------------
-*Trip Type:* ${booking.bookType}
-*Car Type:* ${booking.carType} (${booking.carCategory})
-*Pickup:* ${booking.pickup}
-*Drop:* ${booking.drop}
-*Booked At:* ${booking.bookedAt}
-
-${pickupDateTimeLine}
-
-------------------------------------
-*FARE BREAKDOWN*
-------------------------------------
-*Base Fare (${Math.min(totalDistance, threshold)} km):* Rs.${booking.baseFare.toFixed(2)}
-${extraKm > 0 ? `*Extra Km (${extraKm} km @ Rs.${extraKmRate}/km):* Rs.${extraFee.toFixed(2)}` : ''}
-*Driver Bata:* Rs.${driverBata}
-
-*Total Distance:* ${totalDistance} km
-------------------------------------
-*TOTAL AMOUNT:* Rs.${paymentDetails.total.toFixed(2)}
-------------------------------------
-
-------------------------------------
-*BOOKER DETAILS*
-------------------------------------
-*Name:* ${formData.name}
-*Primary Contact:* ${formData.contact}
-${formData.contact2 ? `*Secondary Contact:* ${formData.contact2}` : ''}
-*Email:* ${formData.email}
-
-------------------------------------
-Thank you for booking with us!`;
-
+			const message = formatBookingMessage(trip, vehicle, formData);
 			const encodedMessage = encodeURIComponent(message);
 			const whatsAppUrl = `${Env_data.WHATSAPP_LINK}=${encodedMessage}`;
 
 			// Open WhatsApp
 			window.open(whatsAppUrl, '_blank');
 
-			// Clear localStorage after sending
+			// Clear stores after sending
 			setTimeout(() => {
-				localStorage.removeItem('tripData');
-				localStorage.removeItem('vehicle-details');
-				console.log('Cleared tripData and vehicle-details after booking.');
+				tripStore.reset();
+				vehicleStore.reset();
+				console.log('Cleared trip and vehicle data after booking.');
 				toast.success('Booking details sent successfully!');
 			}, 2000);
 
@@ -208,6 +227,7 @@ Thank you for booking with us!`;
 			toast.error('Failed to prepare WhatsApp message.');
 		}
 	}
+
 	function handleBack() {
 		window.history.back();
 	}
@@ -287,7 +307,6 @@ Thank you for booking with us!`;
 				</div>
 
 				<div class="flex flex-col border-t border-gray-100 pt-3">
-					<!-- Always show label and amount -->
 					<div class="flex items-center justify-between">
 						<div>
 							<span class="text-sm font-medium text-gray-700">Additional Fare</span>
@@ -301,7 +320,6 @@ Thank you for booking with us!`;
 						</span>
 					</div>
 
-					<!-- Only show message if extra fare applies -->
 					{#if paymentDetails.additionalFare.km > 0}
 						<p class="mt-1 text-xs text-gray-500 italic">
 							Extra {tripType === 'roundtrip' ? 'round trip' : 'one way'} distance — ₹{getExtraKmRate(
@@ -315,7 +333,6 @@ Thank you for booking with us!`;
 				<div class="flex items-center justify-between border-t border-gray-100 pt-3">
 					<div>
 						<span class="text-sm font-medium text-gray-700">Driver Bata</span>
-						<!-- <span class="ml-1 text-xs text-gray-500">[upto {paymentDetails.driverBata.km} Km]</span> -->
 					</div>
 					<span class="text-sm font-semibold text-gray-900"
 						>₹ {paymentDetails.driverBata.amount.toFixed(2)}</span
@@ -371,10 +388,15 @@ Thank you for booking with us!`;
 						type="text"
 						id="name"
 						bind:value={formData.name}
+						onblur={() => validateField('name')}
 						placeholder="Enter your name"
 						required
 						class="w-full rounded-lg border border-gray-300 px-4 py-3 transition-all outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+						class:border-red-500={errors.name}
 					/>
+					{#if errors.name}
+						<p class="mt-1 text-sm text-red-600">{errors.name}</p>
+					{/if}
 				</div>
 
 				<!-- Contact -->
@@ -382,28 +404,50 @@ Thank you for booking with us!`;
 					<label for="contact" class="mb-2 block text-sm font-medium text-gray-700">
 						Contact <span class="text-red-500">*</span>
 					</label>
-					<input
-						type="tel"
-						id="contact"
-						bind:value={formData.contact}
-						placeholder="Mobile Number"
-						required
-						class="w-full rounded-lg border border-gray-300 px-4 py-3 transition-all outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
-					/>
+					<div class="relative">
+						<span class="absolute top-1/2 left-4 -translate-y-1/2 text-sm font-medium text-gray-700"
+							>+91</span
+						>
+						<input
+							type="tel"
+							id="contact"
+							bind:value={formData.contact}
+							onblur={() => validateField('contact')}
+							placeholder="10-digit mobile number"
+							required
+							maxlength="10"
+							class="w-full rounded-lg border border-gray-300 px-4 py-3 pl-14 transition-all outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+							class:border-red-500={errors.contact}
+						/>
+					</div>
+					{#if errors.contact}
+						<p class="mt-1 text-sm text-red-600">{errors.contact}</p>
+					{/if}
 				</div>
 
 				<!-- Contact 2 -->
 				<div>
 					<label for="contact2" class="mb-2 block text-sm font-medium text-gray-700">
-						Contact 2
+						Contact 2 (Optional)
 					</label>
-					<input
-						type="tel"
-						id="contact2"
-						bind:value={formData.contact2}
-						placeholder="Mobile Number"
-						class="w-full rounded-lg border border-gray-300 px-4 py-3 transition-all outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
-					/>
+					<div class="relative">
+						<span class="absolute top-1/2 left-4 -translate-y-1/2 text-sm font-medium text-gray-700"
+							>+91</span
+						>
+						<input
+							type="tel"
+							id="contact2"
+							bind:value={formData.contact2}
+							onblur={() => validateField('contact2')}
+							placeholder="10-digit mobile number"
+							maxlength="10"
+							class="w-full rounded-lg border border-gray-300 px-4 py-3 pl-14 transition-all outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+							class:border-red-500={errors.contact2}
+						/>
+					</div>
+					{#if errors.contact2}
+						<p class="mt-1 text-sm text-red-600">{errors.contact2}</p>
+					{/if}
 				</div>
 
 				<!-- Email -->
@@ -415,10 +459,15 @@ Thank you for booking with us!`;
 						type="email"
 						id="email"
 						bind:value={formData.email}
-						placeholder="Enter your email"
+						onblur={() => validateField('email')}
+						placeholder="your.email@example.com"
 						required
 						class="w-full rounded-lg border border-gray-300 px-4 py-3 transition-all outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+						class:border-red-500={errors.email}
 					/>
+					{#if errors.email}
+						<p class="mt-1 text-sm text-red-600">{errors.email}</p>
+					{/if}
 				</div>
 
 				<!-- Pickup Address -->
@@ -429,20 +478,32 @@ Thank you for booking with us!`;
 					<textarea
 						id="pickupAddress"
 						bind:value={formData.pickupAddress}
-						placeholder="Enter your pickup address"
+						onblur={() => validateField('pickupAddress')}
+						placeholder="Enter your complete pickup address (minimum 10 characters)"
 						required
 						rows="4"
 						class="w-full resize-none rounded-lg border border-gray-300 px-4 py-3 transition-all outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+						class:border-red-500={errors.pickupAddress}
 					></textarea>
+					{#if errors.pickupAddress}
+						<p class="mt-1 text-sm text-red-600">{errors.pickupAddress}</p>
+					{/if}
 				</div>
 
 				<!-- Submit Button -->
 				<button
 					type="submit"
-					class="hover:bg-primary-600 w-full rounded-lg bg-[#051C34] py-4 font-semibold text-white shadow-sm transition-colors"
+					disabled={!isFormValid}
+					class="w-full rounded-lg bg-[#051C34] py-4 font-semibold text-white shadow-sm transition-all hover:bg-[#051C34]/90 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#051C34]"
 				>
 					Book Now
 				</button>
+
+				{#if !isFormValid && (formData.name || formData.email || formData.contact || formData.pickupAddress)}
+					<p class="text-center text-sm text-gray-600">
+						Please fill all required fields correctly to continue
+					</p>
+				{/if}
 			</form>
 		</div>
 	</div>
